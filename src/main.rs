@@ -4,6 +4,7 @@ use crypto::sha1::Sha1;
 use crypto::digest::Digest;
 use std::path::PathBuf;
 use std::fs;
+use axxd::content::EncryptedContent;
 
 fn main() {
     let pass = "a";
@@ -12,8 +13,8 @@ fn main() {
     println!("{:?}", key);
 
     let input = fs::read(PathBuf::from("test.axx")).unwrap();
-    let (guid, input) = slice_guid(&input);
-    println!("guid: {:?}, input: {:?}", guid, input);
+    let data = EncryptedContent::parse(&input);
+    println!("data: {:?}", data);
 
     println!("Hello, world!");
 }
@@ -58,8 +59,4 @@ impl Digest for AxxSha1 {
     fn block_size(&self) -> usize {
         20
     }
-}
-
-fn slice_guid(input: &[u8]) -> (&[u8], &[u8]) {
-    input.split_at(16)
 }
