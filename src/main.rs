@@ -5,6 +5,12 @@ use crypto::digest::Digest;
 use std::path::PathBuf;
 use std::fs;
 use axxd::content::EncryptedContent;
+use axxd::content::HeaderBlockType::{EncryptionInfo, FileNameInfo, Data};
+use crypto::aes::{cbc_decryptor, ecb_decryptor};
+use crypto::aes::KeySize::KeySize256;
+use crypto::blockmodes::NoPadding;
+use crypto::buffer::{RefReadBuffer, RefWriteBuffer};
+use std::convert::TryInto;
 
 fn main() {
     let pass = "a";
@@ -15,6 +21,26 @@ fn main() {
     let input = fs::read(PathBuf::from("test.axx")).unwrap();
     let data = EncryptedContent::parse(&input);
     println!("data: {:?}", data);
+
+    let iv = data.headers.get(&EncryptionInfo).unwrap();
+    let iv = decrypt_header(&iv, &key, 16);
+
+    let file_name = data.headers.get(&FileNameInfo).unwrap();
+    let file_name = decrypt_header(&file_name, &key, 16);
+    unsafe { println!("{}", String::from_utf8_unchecked(file_name)); }
+
+
+    let buffer_size = data.headers.get(&Data).unwrap();
+    let buffer_size = usize::from_le_bytes((*buffer_size).try_into().unwrap());
+
+    let mut read_buffer = RefReadBuffer::new(data.content); //, output: &mut RefWriteBuffer
+    let mut buffer_vec = vec![0; buffer_size];
+    let mut buffer = buffer_vec.as_mut_slice();
+    let mut write_buffer = RefWriteBuffer::new(&mut buffer);
+    let mut decryptor = cbc_decryptor(KeySize256, &key, &iv, NoPadding);
+    decryptor.decrypt(&mut read_buffer, &mut write_buffer, true).unwrap();
+
+    unsafe { println!("{}", String::from_utf8_unchecked(buffer_vec)); }
 
     println!("Hello, world!");
 }
@@ -59,4 +85,14 @@ impl Digest for AxxSha1 {
     fn block_size(&self) -> usize {
         20
     }
+}
+
+fn decrypt_header(data: &[u8], key: &[u8], buffer_size: usize) -> Vec<u8> {
+    let mut read_buffer = RefReadBuffer::new(data); //, output: &mut RefWriteBuffer
+    let mut buffer_vec = vec![0; buffer_size];
+    let mut buffer = buffer_vec.as_mut_slice();
+    let mut write_buffer = RefWriteBuffer::new(&mut buffer);
+    let mut decryptor = ecb_decryptor(KeySize256, key, NoPadding);
+    decryptor.decrypt(&mut read_buffer, &mut write_buffer, true);
+    buffer_vec
 }
