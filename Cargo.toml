@@ -12,6 +12,7 @@ readme = "README.md"
 
 [dependencies]
 rust-crypto = "^0.2"
+flate2 = "1.0"
 
 num = "0.4"
 num-derive = "0.3"

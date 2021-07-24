@@ -1,10 +1,8 @@
-use std::convert::TryInto;
 use crypto::aessafe::AesSafe128Decryptor;
-use crypto::blockmodes::{EcbDecryptor, NoPadding, DecPadding, CbcDecryptor};
-use crypto::symmetriccipher::{SymmetricCipherError, Decryptor};
-use crypto::buffer::{RefReadBuffer, RefWriteBuffer};
-use crypto::aes::cbc_encryptor;
-use crypto::aes::KeySize::KeySize128;
+use crypto::blockmodes::{EcbDecryptor, NoPadding};
+use crate::error::Error;
+use crate::header::decrypt;
+use std::convert::TryInto;
 
 pub struct KeyParams<'a> {
     wrapped_key: &'a [u8],
@@ -37,7 +35,7 @@ impl<'a> KeyParams<'a> {
         }
     }
 
-    pub fn unwrap_key(&self, key: &[u8]) -> Result<Vec<u8>, SymmetricCipherError> {
+    pub fn unwrap_key(&self, key: &[u8]) -> Result<Vec<u8>, Error> {
         let salted_key: Vec<u8> = xor(key, self.salt);
 
         let mut wrapped = self.wrapped_key.to_vec();
@@ -73,46 +71,28 @@ fn xor(a: &[u8], b: &[u8]) -> Vec<u8> {
         .collect::<Vec<u8>>()
 }
 
-pub struct HeaderDecryptor {
-    decryptor: Box<CbcDecryptor<AesSafe128Decryptor, DecPadding<NoPadding>>>,
-}
 
-impl HeaderDecryptor {
-    pub fn new(key: &[u8]) -> Result<HeaderDecryptor, SymmetricCipherError> {
-        let buffer = encrypt_subkey(key, 2)?;
-        let aes_dec = AesSafe128Decryptor::new(&buffer);
-        Ok(HeaderDecryptor {
-            decryptor:  Box::new(CbcDecryptor::new(aes_dec, NoPadding, vec![0u8; 16])),
-        })
+#[cfg(test)]
+mod tests {
+    use crate::key::KeyParams;
+
+    #[test]
+    fn unwrap_key() {
+        let wrapped_key: [u8; 44] = [
+            // raw key
+            0x1F, 0xA6, 0x8B, 0x0A, 0x81, 0x12, 0xB4, 0x47, 0xAE, 0xF3, 0x4B, 0xD8, 0xFB, 0x5A, 0x7B, 0x82, 0x9D, 0x3E, 0x86, 0x23, 0x71, 0xD2, 0xCF, 0xE5,
+            // salt
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            // iterations
+            6, 0, 0, 0
+        ];
+        let encryption_key: [u8; 16] = [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F];
+
+        let params = KeyParams::parse(&wrapped_key);
+        let result = params.unwrap_key(&encryption_key);
+
+        let expected: Vec<u8> = vec![237, 149, 127, 244, 80, 250, 212, 169, 7, 60, 73, 31, 165, 26, 13, 46];
+        assert_eq!(result.unwrap(), expected);
     }
 
-    pub fn decrypt(&mut self, input: &[u8], buffer_length: usize) -> Result<Vec<u8>, SymmetricCipherError> {
-        self.decryptor.reset(&[0u8; 16]);
-        decrypt(self.decryptor.as_mut(), input, buffer_length)
-    }
-}
-
-pub fn encrypt_subkey(key: &[u8], zero_block: u8) -> Result<[u8; 16], SymmetricCipherError> {
-    let mut block = [0u8; 16];
-    block[0] = zero_block;
-
-    let mut read_buffer = RefReadBuffer::new(&block);
-    let mut buffer = [0u8; 16];
-    let mut write_buffer = RefWriteBuffer::new(&mut buffer);
-
-    let mut encryptor = cbc_encryptor(KeySize128, key, &[0u8; 16], NoPadding);
-    encryptor.encrypt(&mut read_buffer, &mut write_buffer, true)?;
-
-    Ok(buffer)
-}
-
-pub fn decrypt(decryptor: &mut dyn Decryptor, input: &[u8], buffer_length: usize) -> Result<Vec<u8>, SymmetricCipherError> {
-    let mut read_buffer = RefReadBuffer::new(input);
-    let mut empty_vec = vec![0; buffer_length];
-    let buffer: &mut [u8] = empty_vec.as_mut_slice();
-    let mut write_buffer = RefWriteBuffer::new(buffer);
-
-    decryptor.decrypt(&mut read_buffer, &mut write_buffer, true)?;
-
-    Ok(buffer.to_vec())
 }
