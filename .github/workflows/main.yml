@@ -33,7 +33,7 @@ jobs:
       - name: Upload compiled files
         uses: actions/upload-artifact@v2
         with:
-          name: rubble-templates-target
+          name: axxd-target
           path: 'target/**/*'
 
   deploy_doc:
@@ -48,7 +48,7 @@ jobs:
       - name: Download compiled files
         uses: actions/download-artifact@v2
         with:
-          name: rubble-templates-target
+          name: axxd-target
           path: target
 
       - name: Deploy to GitHub Pages

@@ -36,8 +36,8 @@ pub fn decrypt(data: &EncryptedContent, passphrase: &str) -> Result<PlainContent
             Ok(buffer)
         }
     }).map(|content| PlainContent {
-        content,
         file_name,
+        content,
     })
 }
 
