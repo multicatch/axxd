@@ -1,0 +1,157 @@
+use crate::{decrypt_file, create_target_path, save_decrypted};
+use std::path::{PathBuf, Path};
+use clap::{App, Arg, ArgMatches};
+use std::io;
+use crate::error::Error;
+use crate::decrypt::PlainContent;
+use std::process::exit;
+
+const FILE_PARAM: &str = "file";
+const PASSPHRASE_PARAM: &str = "passphrase";
+const OVERWRITE_PARAM: &str = "overwrite";
+const NO_OVERWRITE_PARAM: &str = "no-overwrite";
+
+pub fn setup_args() -> ArgMatches<'static> {
+    App::new("axxd")
+        .version("0.1.0")
+        .about("Axxd - an [axx] file [d]ecryptor")
+        .arg(
+            Arg::with_name(FILE_PARAM)
+                .short("f")
+                .long("file")
+                .value_name("FILE")
+                .help("Input file path")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name(PASSPHRASE_PARAM)
+                .short("p")
+                .long("passphrase")
+                .value_name("PASS")
+                .help("Encryption passphrase")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name(OVERWRITE_PARAM)
+                .short("o")
+                .long("overwrite")
+                .help("Overwrite target file if exists")
+                .takes_value(false)
+                .conflicts_with(NO_OVERWRITE_PARAM),
+        )
+        .arg(
+            Arg::with_name(NO_OVERWRITE_PARAM)
+                .short("n")
+                .long("no-overwrite")
+                .help("Abort when target file already exists")
+                .takes_value(false)
+                .conflicts_with(OVERWRITE_PARAM),
+        )
+        .get_matches()
+}
+
+pub fn cli_decrypt(args: ArgMatches) {
+    let overwrite = should_overwrite(&args);
+    let (filename, pass) = retrieve_params(args);
+
+    println!("Decrypting {}...", filename);
+    let source_file = PathBuf::from(filename);
+    match decrypt_file(&source_file, &pass) {
+        Ok(content) => {
+            prompt_save_file_cli(source_file, content, overwrite);
+        }
+        Err(e) => {
+            println!("Cannot decrypt file.");
+            display_error_and_quit(e);
+        }
+    }
+}
+
+fn should_overwrite(args: &ArgMatches) -> Option<bool> {
+    let overwrite = args.is_present(OVERWRITE_PARAM);
+    let no_overwrite = args.is_present(NO_OVERWRITE_PARAM);
+
+    if overwrite || no_overwrite {
+        Some(overwrite)
+    } else {
+        None
+    }
+}
+
+fn retrieve_params(args: ArgMatches) -> (String, String) {
+    let filename = get_param_or_prompt(&args, FILE_PARAM, "Enter file path: ");
+    let pass = get_param_or_prompt(&args, PASSPHRASE_PARAM, "Enter passphrase: ");
+
+    (filename, pass)
+}
+
+fn get_param_or_prompt(args: &ArgMatches, param: &str, prompt: &str) -> String {
+    let value = match args.value_of(param) {
+        Some(value) => value.to_string(),
+        None => {
+            println!("{}", prompt);
+            let mut value: String = String::new();
+            io::stdin().read_line(&mut value).unwrap();
+            value
+        }
+    };
+
+    value.trim_end_matches('\n')
+        .trim_end_matches('\r')
+        .to_string()
+}
+
+fn display_error_and_quit(e: Error) {
+    match e {
+        Error::Encoding(e) => {
+            println!("Parsing error, passphrase may be incorrect or file is is corrupted. Details: {:?}", e);
+        },
+        Error::Io(e) => {
+            println!("Error while reading/writing the file. Details: {:?}", e);
+        }
+        Error::Cipher(e) => {
+            println!("Decryption error, passphrase is incorrect or data is corrupted. Details {:?}", e);
+        }
+        Error::MissingHeader(e) => {
+            println!("Encrypted file is missing data needed to decrypt it. Details: {:?}", e);
+        }
+        Error::MalformedContent { description, content } => {
+            println!("Cannot read metadata from file. {}, encountered on {:?}", description, content);
+        }
+    }
+    exit(254);
+}
+
+fn prompt_save_file_cli<P: AsRef<Path>>(source_file: P, content: PlainContent, overwrite: Option<bool>) {
+    let target_path = create_target_path(&source_file, &content);
+    println!("File successfully decrypted. Saving into {:?}.", target_path);
+
+    if target_path.exists() {
+        print!("WARNING: File already exits. ");
+        let overwrite = if let Some(param_value) = overwrite {
+            param_value
+        } else {
+            ask("Proceed? [y/n]")
+        };
+
+        if overwrite {
+            println!("Overwriting {:?}.", target_path);
+        } else {
+            println!("Aborting.");
+            exit(255);
+        }
+    }
+
+    if let Err(e) = save_decrypted(content, target_path) {
+        display_error_and_quit(e);
+    }
+}
+
+fn ask(question: &str) -> bool {
+    println!("{}", question);
+
+    let mut answer: String = String::new();
+    io::stdin().read_line(&mut answer).unwrap();
+
+    answer.to_lowercase().starts_with('y')
+}
