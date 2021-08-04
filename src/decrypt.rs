@@ -78,7 +78,7 @@ fn extract_iv(header_decryptor: &mut HeaderDecryptor, data: &EncryptedContent) -
 
 fn extract_file_name(header_decryptor: &mut HeaderDecryptor, data: &EncryptedContent) -> Result<String, Error> {
     let file_name = data.header(&FileNameInfo)?;
-    let file_name = header_decryptor.decrypt(*file_name, 16)?;
+    let file_name = header_decryptor.decrypt(*file_name, 260)?;
     let end = file_name.iter().position(|&c| c == 0).unwrap_or(file_name.len());
     String::from_utf8(file_name[..end].to_vec()).map_err(Error::Encoding)
 }
