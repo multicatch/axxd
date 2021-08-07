@@ -79,26 +79,36 @@ fn should_overwrite(args: &ArgMatches) -> Option<bool> {
 }
 
 fn retrieve_params(args: ArgMatches) -> (String, String) {
-    let filename = get_param_or_prompt(&args, FILE_PARAM, "Enter file path: ");
-    let pass = get_param_or_prompt(&args, PASSPHRASE_PARAM, "Enter passphrase: ");
+    let filename = get_param_or_prompt(&args, FILE_PARAM, "Enter file path: ", prompt_plain_text);
+    let pass = get_param_or_prompt(&args, PASSPHRASE_PARAM, "Enter passphrase: ", prompt_pass);
 
     (filename, pass)
 }
 
-fn get_param_or_prompt(args: &ArgMatches, param: &str, prompt: &str) -> String {
+fn get_param_or_prompt<F>(args: &ArgMatches, param: &str, message: &str, prompt: F) -> String
+    where F: Fn(&str) -> Option<String> {
     let value = match args.value_of(param) {
         Some(value) => value.to_string(),
-        None => {
-            println!("{}", prompt);
-            let mut value: String = String::new();
-            io::stdin().read_line(&mut value).unwrap();
-            value
-        }
+        None => prompt(message).unwrap()
     };
 
     value.trim_end_matches('\n')
         .trim_end_matches('\r')
         .to_string()
+}
+
+fn prompt_plain_text(prompt: &str) -> Option<String> {
+    println!("{}", prompt);
+    let mut value: String = String::new();
+    if let Ok(_) = io::stdin().read_line(&mut value) {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+fn prompt_pass(prompt: &str) -> Option<String> {
+    rpassword::prompt_password_stdout(prompt).ok()
 }
 
 fn display_error_and_quit(e: Error) {
