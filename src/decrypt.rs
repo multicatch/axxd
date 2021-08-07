@@ -140,7 +140,7 @@ mod tests {
         };
 
         let expected = PlainContent {
-            file_name: "HelloWorld-Key-a".to_string(),
+            file_name: "HelloWorld-Key-a.txt".to_string(),
             content: vec![72, 101, 108, 108, 111, 87, 111, 114, 108, 100, 0, 0, 0, 0, 0, 0],
         };
         let result = decrypt(&encrypted_content, "a");

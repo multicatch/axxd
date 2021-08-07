@@ -100,7 +100,7 @@ fn get_param_or_prompt<F>(args: &ArgMatches, param: &str, message: &str, prompt:
 fn prompt_plain_text(prompt: &str) -> Option<String> {
     println!("{}", prompt);
     let mut value: String = String::new();
-    if let Ok(_) = io::stdin().read_line(&mut value) {
+    if io::stdin().read_line(&mut value).is_ok() {
         Some(value)
     } else {
         None
