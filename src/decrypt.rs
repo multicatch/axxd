@@ -22,15 +22,15 @@ pub struct PlainContent {
 
 pub fn decrypt(data: &EncryptedContent, passphrase: &str) -> Result<PlainContent, Error> {
     let key = derive_key(passphrase);
-    let key = extract_master_key(&data, &key)?;
+    let key = extract_master_key(data, &key)?;
 
     let mut header_decryptor = HeaderDecryptor::new(&key).unwrap();
-    let iv = extract_iv(&mut header_decryptor, &data)?;
+    let iv = extract_iv(&mut header_decryptor, data)?;
     let file_name = extract_file_name(&mut header_decryptor, data)?;
     let is_compressed = extract_is_compressed(&mut header_decryptor, data)?;
     let buffer_size = extract_buffer_size(data)?;
 
-    decrypt_data(&key, &iv, &data.content, buffer_size).and_then(|buffer| {
+    decrypt_data(&key, &iv, data.content, buffer_size).and_then(|buffer| {
         if is_compressed {
             decompress(&buffer)
         } else {
@@ -59,8 +59,8 @@ fn decrypt_data(key: &[u8], iv: &[u8], data: &[u8], buffer_size: usize) -> Resul
     let buffer = buffer_vec.as_mut_slice();
     let mut write_buffer = RefWriteBuffer::new(buffer);
 
-    let data_key = encrypt_subkey(&key, 3).map_err(Error::Cipher)?;
-    let mut decryptor = cbc_decryptor(KeySize128, &data_key, &iv, PkcsPadding);
+    let data_key = encrypt_subkey(key, 3).map_err(Error::Cipher)?;
+    let mut decryptor = cbc_decryptor(KeySize128, &data_key, iv, PkcsPadding);
     decryptor.decrypt(&mut read_buffer, &mut write_buffer, true).map_err(Error::Cipher)?;
 
     Ok(buffer.to_vec())
@@ -69,7 +69,7 @@ fn decrypt_data(key: &[u8], iv: &[u8], data: &[u8], buffer_size: usize) -> Resul
 fn extract_master_key(data: &EncryptedContent, key: &[u8]) -> Result<Vec<u8>, Error> {
     let raw_key_wrap = data.header(&KeyWrap1)?;
     let params = KeyParams::parse(*raw_key_wrap);
-    params.unwrap_key(&key)
+    params.unwrap_key(key)
 }
 
 fn extract_iv(header_decryptor: &mut HeaderDecryptor, data: &EncryptedContent) -> Result<Vec<u8>, Error> {

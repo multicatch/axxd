@@ -47,7 +47,7 @@ impl<'a> KeyParams<'a> {
         let rounds: u64 = KEY_ROUNDS_BASE * self.iterations as u64;
         for t in (1..(rounds + 1)).rev() {
             let block = &wrapped[0..8];
-            let mut block = xor(&block, &t.to_le_bytes());
+            let mut block = xor(block, &t.to_le_bytes());
             let second_start: usize = ((((t + 1) % KEY_ROUNDS_BASE) + 1) * 8) as usize;
 
             block.extend_from_slice(&wrapped[second_start..(second_start + 8)]);
