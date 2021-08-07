@@ -12,6 +12,7 @@ use std::io::Read;
 use crypto::sha1::Sha1;
 use crate::key::KeyParams;
 use crypto::digest::Digest;
+use encoding_rs::WINDOWS_1252;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct PlainContent {
@@ -44,7 +45,8 @@ pub fn decrypt(data: &EncryptedContent, passphrase: &str) -> Result<PlainContent
 fn derive_key(password: &str) -> [u8; 16] {
     let mut key = [0; 20];
     let mut sha1 = Sha1::new();
-    sha1.input(password.as_bytes());
+    let (pass_bytes, _, _) = WINDOWS_1252.encode(password);
+    sha1.input(pass_bytes.as_ref());
     sha1.result(&mut key);
     let mut result: [u8; 16] = Default::default();
     result.copy_from_slice(&key[0..16]);
@@ -78,8 +80,14 @@ fn extract_iv(header_decryptor: &mut HeaderDecryptor, data: &EncryptedContent) -
 
 fn extract_file_name(header_decryptor: &mut HeaderDecryptor, data: &EncryptedContent) -> Result<String, Error> {
     let file_name = data.header(&FileNameInfo)?;
-    let file_name = header_decryptor.decrypt(*file_name, 260)?;
-    let end = file_name.iter().position(|&c| c == 0).unwrap_or(file_name.len());
+    let mut file_name = header_decryptor.decrypt(*file_name, 260)?;
+    let mut end = file_name.iter().position(|&c| c == 0).unwrap_or(file_name.len());
+    let (result, _, has_errors) = WINDOWS_1252.decode(&file_name);
+    if !has_errors {
+        file_name = result.as_bytes().to_vec();
+        end = file_name.iter().position(|&c| c == 0).unwrap_or(file_name.len());
+    }
+
     String::from_utf8(file_name[..end].to_vec()).map_err(Error::Encoding)
 }
 

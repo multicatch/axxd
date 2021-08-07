@@ -20,6 +20,7 @@ const ITERATIONS_STARTS: usize = SALT_START + SALT_LENGTH;
 const ITERATIONS_LENGTH: usize = 4;
 
 const AES_KEY_LENGTH: u32 = 16;
+const KEY_ROUNDS_BASE: u64 = AES_KEY_LENGTH as u64 / 8;
 
 impl<'a> KeyParams<'a> {
     pub fn parse(key_wrap: &[u8]) -> KeyParams {
@@ -42,22 +43,21 @@ impl<'a> KeyParams<'a> {
 
         let aes_dec = AesSafe128Decryptor::new(salted_key.as_slice());
         let mut decryptor = Box::new(EcbDecryptor::new(aes_dec, NoPadding));
-        for j in (0..self.iterations).rev() {
-            for i in (1..(AES_KEY_LENGTH / 8 + 1)).rev() {
-                let t: u64 = (((AES_KEY_LENGTH / 8) * j) + i) as u64;
-                let block = &wrapped[0..8];
-                let mut block = xor(&block, &t.to_le_bytes());
-                let second_start: usize = (i * 8) as usize;
 
-                block.extend_from_slice(&wrapped[second_start..(second_start + 8)]);
+        let rounds: u64 = KEY_ROUNDS_BASE * self.iterations as u64;
+        for t in (1..(rounds + 1)).rev() {
+            let block = &wrapped[0..8];
+            let mut block = xor(&block, &t.to_le_bytes());
+            let second_start: usize = ((((t + 1) % KEY_ROUNDS_BASE) + 1) * 8) as usize;
 
-                decryptor.reset();
-                let buffer = decrypt(decryptor.as_mut(), block.as_slice(), 16)?;
+            block.extend_from_slice(&wrapped[second_start..(second_start + 8)]);
 
-                let (first_half, second_half) = buffer.split_at(8);
-                wrapped.splice(..8, first_half.to_vec());
-                wrapped.splice(second_start..(second_start + 8), second_half.to_vec());
-            }
+            decryptor.reset();
+            let buffer = decrypt(decryptor.as_mut(), block.as_slice(), 16)?;
+
+            let (first_half, second_half) = buffer.split_at(8);
+            wrapped.splice(..8, first_half.to_vec());
+            wrapped.splice(second_start..(second_start + 8), second_half.to_vec());
         }
 
         Ok(wrapped[8..].to_vec())
