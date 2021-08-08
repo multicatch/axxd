@@ -8,6 +8,8 @@ and I didn't want to use WINE.
 
 ## Usage
 
+The newest standalone version can be downladed from GitHub Releases or build from sources using `cargo build --release`.
+
 ```text
 axxd 0.1.0
 Axxd - an [axx] file [d]ecryptor
@@ -55,3 +57,28 @@ Decrypting secret.axx...
 File successfully decrypted. Saving into "secret.txt".
 WARNING: File already exits. Aborting.
 ```
+
+## Using the API
+
+You can simply decrypt a file using a `decrypt_file<P: AsRef<Path>>(path: P, passphrase: &str)` function.
+It reads the file and then tries to decrypt it using a given passphrase.
+Returns decrypted content as result.
+
+```rust
+    match decrypt_file(&source_file, &pass) {
+        Ok(content) => save_file(content),
+        Err(e) => {
+            println!("Cannot decrypt file.");
+            display_error_and_quit(e);
+        }
+    }
+```
+
+You can also use `decrypt(data: &EncryptedContent, passphrase: &str)` to decrypt raw content.
+To parse raw bytes into `EncryptedContent`, use the `parse` function
+
+```rust
+    let data = EncryptedContent::parse(&input);
+    decrypt(&data, passphrase)
+````
+

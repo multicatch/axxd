@@ -1,5 +1,6 @@
 [package]
 name = "axxd"
+description = "A simple axx file decryption tool. "
 version = "0.1.0"
 authors = ["multicatch <cezaryre@gmail.com>"]
 edition = "2018"
