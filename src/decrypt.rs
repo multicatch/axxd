@@ -88,7 +88,7 @@ fn extract_file_name(header_decryptor: &mut HeaderDecryptor, data: &EncryptedCon
         end = file_name.iter().position(|&c| c == 0).unwrap_or(file_name.len());
     }
 
-    String::from_utf8(file_name[..end].to_vec()).map_err(Error::Encoding)
+    String::from_utf8(file_name[..end].to_vec()).map_err(Error::FileNameEncoding)
 }
 
 fn extract_is_compressed(header_decryptor: &mut HeaderDecryptor, data: &EncryptedContent) -> Result<bool, Error> {

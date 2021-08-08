@@ -8,7 +8,7 @@ pub enum Error {
     Io(io::Error),
     Cipher(SymmetricCipherError),
     MissingHeader(HeaderBlockType),
-    Encoding(FromUtf8Error),
+    FileNameEncoding(FromUtf8Error),
     MalformedContent {
         description: String,
         content: Vec<u8>,

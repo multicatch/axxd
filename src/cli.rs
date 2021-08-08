@@ -113,20 +113,20 @@ fn prompt_pass(prompt: &str) -> Option<String> {
 
 fn display_error_and_quit(e: Error) {
     match e {
-        Error::Encoding(e) => {
-            println!("Parsing error, passphrase may be incorrect or file is is corrupted. Details: {:?}", e);
+        Error::FileNameEncoding(e) => {
+            println!("Passphrase may be incorrect or file is is corrupted. \nDetails: {:?}", e);
         },
         Error::Io(e) => {
-            println!("Error while reading/writing the file. Details: {:?}", e);
+            println!("Cannot read/write the file. \nDetails: {:?}", e);
         }
         Error::Cipher(e) => {
-            println!("Decryption error, passphrase is incorrect or data is corrupted. Details {:?}", e);
+            println!("Decryption error, passphrase is incorrect or data is corrupted. \nDetails {:?}", e);
         }
         Error::MissingHeader(e) => {
-            println!("Encrypted file is missing data needed to decrypt it. Details: {:?}", e);
+            println!("Encrypted file is in incorrect format. Missing metadata that is needed to decrypt it. \nDetails: {:?}", e);
         }
         Error::MalformedContent { description, content } => {
-            println!("Cannot read metadata from file. {}, encountered on {:?}", description, content);
+            println!("Cannot read metadata from file. \n{}, encountered on {:?}", description, content);
         }
     }
     exit(254);
