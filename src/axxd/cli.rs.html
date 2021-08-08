@@ -283,20 +283,20 @@
 
 <span class="kw">fn</span> <span class="ident">display_error_and_quit</span>(<span class="ident">e</span>: <span class="ident">Error</span>) {
     <span class="kw">match</span> <span class="ident">e</span> {
-        <span class="ident">Error::Encoding</span>(<span class="ident">e</span>) <span class="op">=</span><span class="op">&gt;</span> {
-            <span class="macro">println!</span>(<span class="string">&quot;Parsing error, passphrase may be incorrect or file is is corrupted. Details: {:?}&quot;</span>, <span class="ident">e</span>);
+        <span class="ident">Error::FileNameEncoding</span>(<span class="ident">e</span>) <span class="op">=</span><span class="op">&gt;</span> {
+            <span class="macro">println!</span>(<span class="string">&quot;Passphrase may be incorrect or file is is corrupted. \nDetails: {:?}&quot;</span>, <span class="ident">e</span>);
         },
         <span class="ident">Error::Io</span>(<span class="ident">e</span>) <span class="op">=</span><span class="op">&gt;</span> {
-            <span class="macro">println!</span>(<span class="string">&quot;Error while reading/writing the file. Details: {:?}&quot;</span>, <span class="ident">e</span>);
+            <span class="macro">println!</span>(<span class="string">&quot;Cannot read/write the file. \nDetails: {:?}&quot;</span>, <span class="ident">e</span>);
         }
         <span class="ident">Error::Cipher</span>(<span class="ident">e</span>) <span class="op">=</span><span class="op">&gt;</span> {
-            <span class="macro">println!</span>(<span class="string">&quot;Decryption error, passphrase is incorrect or data is corrupted. Details {:?}&quot;</span>, <span class="ident">e</span>);
+            <span class="macro">println!</span>(<span class="string">&quot;Decryption error, passphrase is incorrect or data is corrupted. \nDetails {:?}&quot;</span>, <span class="ident">e</span>);
         }
         <span class="ident">Error::MissingHeader</span>(<span class="ident">e</span>) <span class="op">=</span><span class="op">&gt;</span> {
-            <span class="macro">println!</span>(<span class="string">&quot;Encrypted file is missing data needed to decrypt it. Details: {:?}&quot;</span>, <span class="ident">e</span>);
+            <span class="macro">println!</span>(<span class="string">&quot;Encrypted file is in incorrect format. Missing metadata that is needed to decrypt it. \nDetails: {:?}&quot;</span>, <span class="ident">e</span>);
         }
         <span class="ident">Error::MalformedContent</span> { <span class="ident">description</span>, <span class="ident">content</span> } <span class="op">=</span><span class="op">&gt;</span> {
-            <span class="macro">println!</span>(<span class="string">&quot;Cannot read metadata from file. {}, encountered on {:?}&quot;</span>, <span class="ident">description</span>, <span class="ident">content</span>);
+            <span class="macro">println!</span>(<span class="string">&quot;Cannot read metadata from file. \n{}, encountered on {:?}&quot;</span>, <span class="ident">description</span>, <span class="ident">content</span>);
         }
     }
     <span class="ident">exit</span>(<span class="number">254</span>);

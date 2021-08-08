@@ -241,7 +241,7 @@
         <span class="ident">end</span> <span class="op">=</span> <span class="ident">file_name</span>.<span class="ident">iter</span>().<span class="ident">position</span>(<span class="op">|</span><span class="kw-2">&amp;</span><span class="ident">c</span><span class="op">|</span> <span class="ident">c</span> <span class="op">=</span><span class="op">=</span> <span class="number">0</span>).<span class="ident">unwrap_or</span>(<span class="ident">file_name</span>.<span class="ident">len</span>());
     }
 
-    <span class="ident">String::from_utf8</span>(<span class="ident">file_name</span>[..<span class="ident">end</span>].<span class="ident">to_vec</span>()).<span class="ident">map_err</span>(<span class="ident">Error::Encoding</span>)
+    <span class="ident">String::from_utf8</span>(<span class="ident">file_name</span>[..<span class="ident">end</span>].<span class="ident">to_vec</span>()).<span class="ident">map_err</span>(<span class="ident">Error::FileNameEncoding</span>)
 }
 
 <span class="kw">fn</span> <span class="ident">extract_is_compressed</span>(<span class="ident">header_decryptor</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">HeaderDecryptor</span>, <span class="ident">data</span>: <span class="kw-2">&amp;</span><span class="ident">EncryptedContent</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">bool</span>, <span class="ident">Error</span><span class="op">&gt;</span> {
