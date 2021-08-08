@@ -1,3 +1,3 @@
 (function() {var implementors = {};
-implementors["axxd"] = [{"text":"impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/hash/trait.Hash.html\" title=\"trait core::hash::Hash\">Hash</a> for <a class=\"enum\" href=\"axxd/content/enum.HeaderBlockType.html\" title=\"enum axxd::content::HeaderBlockType\">HeaderBlockType</a>","synthetic":false,"types":["axxd::content::HeaderBlockType"]}];
+implementors["axxd"] = [{"text":"impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.54.0/core/hash/trait.Hash.html\" title=\"trait core::hash::Hash\">Hash</a> for <a class=\"enum\" href=\"axxd/content/enum.HeaderBlockType.html\" title=\"enum axxd::content::HeaderBlockType\">HeaderBlockType</a>","synthetic":false,"types":["axxd::content::HeaderBlockType"]}];
 if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
