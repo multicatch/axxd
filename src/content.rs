@@ -25,16 +25,37 @@ pub enum HeaderBlockType {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct EncryptedContent<'a> {
-    pub headers: HashMap<HeaderBlockType, &'a [u8]>,
-    pub content: &'a [u8],
+pub struct PlainContent {
+    pub file_name: String,
+    pub content: Vec<u8>,
 }
 
-impl<'a> EncryptedContent<'a> {
+impl PlainContent {
+    pub fn new(file_name: String, content: Vec<u8>) -> PlainContent {
+        PlainContent {
+            file_name, content
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct EncryptedContent {
+    pub headers: HashMap<HeaderBlockType, Vec<u8>>,
+    pub content: Vec<u8>,
+}
+
+impl EncryptedContent {
+    pub fn new(headers: HashMap<HeaderBlockType, Vec<u8>>, content: Vec<u8>) -> EncryptedContent {
+        EncryptedContent {
+            headers,
+            content,
+        }
+    }
+
     pub fn parse(input: &[u8]) -> EncryptedContent {
         let (_, input) = slice_guid(input);
 
-        let mut headers: HashMap<HeaderBlockType, &[u8]> = HashMap::new();
+        let mut headers: HashMap<HeaderBlockType, Vec<u8>> = HashMap::new();
         let mut block_type = HeaderBlockType::Unrecognized;
         let mut remaining = input;
 
@@ -42,17 +63,17 @@ impl<'a> EncryptedContent<'a> {
             let (bt, data, rem) = parse_block(remaining);
             block_type = bt;
             remaining = rem;
-            headers.insert(block_type, data);
+            headers.insert(block_type, data.to_vec());
         }
 
         EncryptedContent {
             headers,
-            content: remaining,
+            content: remaining.to_vec(),
         }
     }
 
-    pub fn header(&self, header_type: &HeaderBlockType) -> Result<&&'a [u8], Error> {
-        self.headers.get(header_type).ok_or_else(|| Error::MissingHeader(*header_type))
+    pub fn header(&self, header_type: &HeaderBlockType) -> Result<&Vec<u8>, Error> {
+        self.headers.get(header_type).ok_or(Error::MissingHeader(*header_type))
     }
 }
 
@@ -105,21 +126,21 @@ mod tests {
 
         let encrypted_content = EncryptedContent::parse(&content);
 
-        let mut expected_headers: HashMap<HeaderBlockType, &'static [u8]> = HashMap::new();
-        expected_headers.insert(UnicodeFileNameInfo, &[91, 221, 69, 87, 13, 160, 252, 142, 146, 199, 116, 179, 6, 158, 215, 24, 85, 239, 35, 188, 17, 192, 58, 17, 141, 138, 234, 92, 132, 110, 98, 78, 17, 190, 38, 180, 75, 91, 122, 200, 5, 105, 143, 155, 59, 32, 17, 102]);
-        expected_headers.insert(CompressionInfo, &[44, 168, 59, 140, 101, 162, 228, 35, 23, 253, 23, 153, 146, 39, 123, 145]);
-        expected_headers.insert(KeyWrap1, &[78, 234, 7, 243, 69, 145, 112, 237, 142, 64, 249, 34, 244, 238, 203, 161, 77, 158, 238, 154, 91, 48, 24, 99, 36, 135, 131, 140, 243, 205, 170, 92, 193, 204, 52, 132, 241, 48, 106, 14, 152, 58, 0, 0]);
-        expected_headers.insert(FileNameInfo, &[126, 144, 45, 29, 111, 84, 255, 96, 16, 3, 238, 101, 191, 3, 166, 79, 159, 90, 65, 85, 177, 101, 206, 15, 192, 170, 220, 8, 232, 241, 48, 208]);
-        expected_headers.insert(Data, &[16, 0, 0, 0, 0, 0, 0, 0]);
-        expected_headers.insert(Preamble, &[249, 175, 46, 103, 125, 207, 201, 254, 6, 75, 57, 8, 231, 90, 135, 129]);
-        expected_headers.insert(Compression, &[143, 251, 137, 241, 73, 30, 41, 58, 173, 103, 29, 6, 157, 21, 210, 74]);
-        expected_headers.insert(Version, &[3, 0, 0, 0, 0, 0, 0, 0]);
-        expected_headers.insert(EncryptionInfo, &[220, 57, 232, 214, 185, 219, 241, 140, 73, 172, 114, 212, 103, 89, 100, 32, 161, 128, 98, 168, 230, 218, 189, 97, 222, 136, 55, 7, 56, 142, 14, 33]);
-        expected_headers.insert(FileInfo, &[154, 34, 179, 201, 119, 228, 149, 36, 157, 188, 130, 68, 59, 136, 84, 161, 58, 55, 160, 188, 233, 51, 110, 17, 122, 104, 161, 5, 127, 15, 84, 44]);
+        let mut expected_headers: HashMap<HeaderBlockType, Vec<u8>> = HashMap::new();
+        expected_headers.insert(UnicodeFileNameInfo, vec![91, 221, 69, 87, 13, 160, 252, 142, 146, 199, 116, 179, 6, 158, 215, 24, 85, 239, 35, 188, 17, 192, 58, 17, 141, 138, 234, 92, 132, 110, 98, 78, 17, 190, 38, 180, 75, 91, 122, 200, 5, 105, 143, 155, 59, 32, 17, 102]);
+        expected_headers.insert(CompressionInfo, vec![44, 168, 59, 140, 101, 162, 228, 35, 23, 253, 23, 153, 146, 39, 123, 145]);
+        expected_headers.insert(KeyWrap1, vec![78, 234, 7, 243, 69, 145, 112, 237, 142, 64, 249, 34, 244, 238, 203, 161, 77, 158, 238, 154, 91, 48, 24, 99, 36, 135, 131, 140, 243, 205, 170, 92, 193, 204, 52, 132, 241, 48, 106, 14, 152, 58, 0, 0]);
+        expected_headers.insert(FileNameInfo, vec![126, 144, 45, 29, 111, 84, 255, 96, 16, 3, 238, 101, 191, 3, 166, 79, 159, 90, 65, 85, 177, 101, 206, 15, 192, 170, 220, 8, 232, 241, 48, 208]);
+        expected_headers.insert(Data, vec![16, 0, 0, 0, 0, 0, 0, 0]);
+        expected_headers.insert(Preamble, vec![249, 175, 46, 103, 125, 207, 201, 254, 6, 75, 57, 8, 231, 90, 135, 129]);
+        expected_headers.insert(Compression, vec![143, 251, 137, 241, 73, 30, 41, 58, 173, 103, 29, 6, 157, 21, 210, 74]);
+        expected_headers.insert(Version, vec![3, 0, 0, 0, 0, 0, 0, 0]);
+        expected_headers.insert(EncryptionInfo, vec![220, 57, 232, 214, 185, 219, 241, 140, 73, 172, 114, 212, 103, 89, 100, 32, 161, 128, 98, 168, 230, 218, 189, 97, 222, 136, 55, 7, 56, 142, 14, 33]);
+        expected_headers.insert(FileInfo, vec![154, 34, 179, 201, 119, 228, 149, 36, 157, 188, 130, 68, 59, 136, 84, 161, 58, 55, 160, 188, 233, 51, 110, 17, 122, 104, 161, 5, 127, 15, 84, 44]);
 
         assert_eq!(encrypted_content, EncryptedContent {
             headers: expected_headers,
-            content: &[52, 95, 227, 92, 134, 151, 237, 129, 132, 254, 43, 74, 154, 210, 190, 253]
+            content: vec![52, 95, 227, 92, 134, 151, 237, 129, 132, 254, 43, 74, 154, 210, 190, 253]
         })
     }
 }

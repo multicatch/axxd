@@ -1,9 +1,11 @@
 #[macro_use]
 extern crate num_derive;
+extern crate rand;
 
 use crate::error::Error;
-use crate::content::EncryptedContent;
-use crate::decrypt::{decrypt, PlainContent};
+use crate::content::{EncryptedContent, PlainContent};
+use crate::decrypt::decrypt;
+use crate::encrypt::encrypt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::io::Write;
@@ -14,11 +16,23 @@ pub mod header;
 pub mod error;
 pub mod decrypt;
 pub mod cli;
+pub mod encrypt;
 
 pub fn decrypt_file<P: AsRef<Path>>(path: P, passphrase: &str) -> Result<PlainContent, Error> {
     let input = fs::read(&path).map_err(Error::Io)?;
     let data = EncryptedContent::parse(&input);
     decrypt(&data, passphrase)
+}
+
+pub fn encrypt_file<P: AsRef<Path>>(path: P, passphrase: &str) -> Result<EncryptedContent, Error> {
+    let input = fs::read(&path).map_err(Error::Io)?;
+    let file_name = path.as_ref()
+        .file_name()
+        .and_then(|it| it.to_str())
+        .unwrap();
+
+    let data = PlainContent::new(file_name.to_string(), input);
+    encrypt(&data, passphrase)
 }
 
 pub fn create_target_path<P: AsRef<Path>>(path: P, decrypted: &PlainContent) -> PathBuf {

@@ -1,9 +1,8 @@
-use crate::{decrypt_file, create_target_path, save_decrypted};
+use crate::{decrypt_file, create_target_path, save_decrypted, PlainContent};
 use std::path::{PathBuf, Path};
 use clap::{App, Arg, ArgMatches};
 use std::io;
 use crate::error::Error;
-use crate::decrypt::PlainContent;
 use std::process::exit;
 
 const FILE_PARAM: &str = "file";

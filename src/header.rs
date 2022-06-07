@@ -1,9 +1,9 @@
 use crypto::aes::cbc_encryptor;
 use crypto::aes::KeySize::KeySize128;
-use crypto::blockmodes::{NoPadding, DecPadding, CbcDecryptor};
+use crypto::blockmodes::{NoPadding, DecPadding, CbcDecryptor, CbcEncryptor, EncPadding};
 use crypto::buffer::{RefReadBuffer, RefWriteBuffer};
-use crypto::symmetriccipher::{SymmetricCipherError, Decryptor};
-use crypto::aessafe::AesSafe128Decryptor;
+use crypto::symmetriccipher::{SymmetricCipherError, Decryptor, Encryptor};
+use crypto::aessafe::{AesSafe128Decryptor, AesSafe128Encryptor};
 use crate::error::Error;
 
 pub struct HeaderDecryptor {
@@ -22,6 +22,25 @@ impl HeaderDecryptor {
     pub fn decrypt(&mut self, input: &[u8], buffer_length: usize) -> Result<Vec<u8>, Error> {
         self.decryptor.reset(&[0u8; 16]);
         decrypt(self.decryptor.as_mut(), input, buffer_length)
+    }
+}
+
+pub struct HeaderEncryptor {
+    encryptor: Box<CbcEncryptor<AesSafe128Encryptor, EncPadding<NoPadding>>>
+}
+
+impl HeaderEncryptor {
+    pub fn new(key: &[u8]) -> Result<HeaderEncryptor, SymmetricCipherError> {
+        let buffer = encrypt_subkey(key, 2)?;
+        let aes_dec = AesSafe128Encryptor::new(&buffer);
+        Ok(HeaderEncryptor {
+            encryptor:  Box::new(CbcEncryptor::new(aes_dec, NoPadding, vec![0u8; 16])),
+        })
+    }
+
+    pub fn encrypt(&mut self, input: &[u8], buffer_length: usize) -> Result<Vec<u8>, Error> {
+        self.encryptor.reset(&[0u8; 16]);
+        encrypt(self.encryptor.as_mut(), input, buffer_length)
     }
 }
 
@@ -46,6 +65,17 @@ pub fn decrypt(decryptor: &mut dyn Decryptor, input: &[u8], buffer_length: usize
     let mut write_buffer = RefWriteBuffer::new(buffer);
 
     decryptor.decrypt(&mut read_buffer, &mut write_buffer, true).map_err(Error::Cipher)?;
+
+    Ok(buffer.to_vec())
+}
+
+pub fn encrypt(encryptor: &mut dyn Encryptor, input: &[u8], buffer_length: usize) -> Result<Vec<u8>, Error> {
+    let mut read_buffer = RefReadBuffer::new(input);
+    let mut empty_vec = vec![0; buffer_length];
+    let buffer: &mut [u8] = empty_vec.as_mut_slice();
+    let mut write_buffer = RefWriteBuffer::new(buffer);
+
+    encryptor.encrypt(&mut read_buffer, &mut write_buffer, true).map_err(Error::Cipher)?;
 
     Ok(buffer.to_vec())
 }

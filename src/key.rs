@@ -4,9 +4,9 @@ use crate::error::Error;
 use crate::header::decrypt;
 use std::convert::TryInto;
 
-pub struct KeyParams<'a> {
-    wrapped_key: &'a [u8],
-    salt: &'a [u8],
+pub struct KeyParams {
+    wrapped_key: Vec<u8>,
+    salt: Vec<u8>,
     iterations: u32,
 }
 
@@ -22,7 +22,27 @@ const ITERATIONS_LENGTH: usize = 4;
 const AES_KEY_LENGTH: u32 = 16;
 const KEY_ROUNDS_BASE: u64 = AES_KEY_LENGTH as u64 / 8;
 
-impl<'a> KeyParams<'a> {
+impl KeyParams {
+    pub fn generate() -> KeyParams {
+        let mut key = [0u8; KEY_LENGTH];
+        for byte in key.iter_mut() {
+            *byte = rand::random();
+        }
+
+        let mut salt = [0u8; SALT_LENGTH];
+        for byte in salt.iter_mut() {
+            *byte = rand::random();
+        }
+        let iterations: u16 = rand::random();
+        let iterations: u32 = (iterations + 5) as u32;
+
+        KeyParams {
+            wrapped_key: key.to_vec(),
+            salt: salt.to_vec(),
+            iterations
+        }
+    }
+
     pub fn parse(key_wrap: &[u8]) -> KeyParams {
         let key = &key_wrap[KEY_START..(KEY_START + KEY_LENGTH)];
         let salt = &key_wrap[SALT_START..(SALT_START + SALT_LENGTH)];
@@ -30,14 +50,14 @@ impl<'a> KeyParams<'a> {
         let iterations = u32::from_le_bytes(iterations.try_into().unwrap());
 
         KeyParams {
-            wrapped_key: key,
-            salt,
+            wrapped_key: key.to_vec(),
+            salt: salt.to_vec(),
             iterations,
         }
     }
 
     pub fn unwrap_key(&self, key: &[u8]) -> Result<Vec<u8>, Error> {
-        let salted_key: Vec<u8> = xor(key, self.salt);
+        let salted_key: Vec<u8> = xor(key, &self.salt);
 
         let mut wrapped = self.wrapped_key.to_vec();
 
