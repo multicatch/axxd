@@ -31,7 +31,7 @@ pub fn encrypt(data: &PlainContent, passphrase: &str) -> Result<EncryptedContent
                    data.content.len() as u64
     )?;
 
-    let encrypted = encrypt_data(&key, &iv, &data.content, data.content.len())?;
+    let encrypted = encrypt_data(&key, &iv, &data.content, data.content.len() + 16)?;
     Ok(EncryptedContent::new(headers, encrypted))
 }
 
@@ -57,12 +57,12 @@ fn insert_headers(
     // TODO: headers.insert(Preamble, vec![249, 175, 46, 103, 125, 207, 201, 254, 6, 75, 57, 8, 231, 90, 135, 129]);
     headers.insert(Version, vec![3, 0, 0, 0, 0, 0, 0, 0]);
     headers.insert(KeyWrap1, key_params.format_key_wrap());
-    headers.insert(EncryptionInfo, header_encryptor.encrypt(padded_iv, padded_iv.len())?);
+    headers.insert(EncryptionInfo, header_encryptor.encrypt(padded_iv)?);
     headers.insert(FileNameInfo, encrypt_file_name(header_encryptor, file_name, WINDOWS_1252)?);
     headers.insert(UnicodeFileNameInfo, encrypt_file_name(header_encryptor, file_name, UTF_8)?);
     headers.insert(Compression, encrypt_is_compressed(header_encryptor, false)?);
     //headers.insert(CompressionInfo, vec![44, 168, 59, 140, 101, 162, 228, 35, 23, 253, 23, 153, 146, 39, 123, 145]);
-    //required: headers.insert(FileInfo, vec![154, 34, 179, 201, 119, 228, 149, 36, 157, 188, 130, 68, 59, 136, 84, 161, 58, 55, 160, 188, 233, 51, 110, 17, 122, 104, 161, 5, 127, 15, 84, 44]);
+    // TODO: headers.insert(FileInfo, vec![154, 34, 179, 201, 119, 228, 149, 36, 157, 188, 130, 68, 59, 136, 84, 161, 58, 55, 160, 188, 233, 51, 110, 17, 122, 104, 161, 5, 127, 15, 84, 44]);
     headers.insert(Data, buffer_size.to_le_bytes().to_vec());
     Ok(())
 }
@@ -79,7 +79,7 @@ fn encrypt_file_name(header_encryptor: &mut HeaderEncryptor, file_name: &str, en
     let mut file_name_bytes = vec![0u8; slice_len];
     file_name_bytes[0..slice_len].copy_from_slice(&file_name[..slice_len]);
 
-    header_encryptor.encrypt(&file_name_bytes, slice_len)
+    header_encryptor.encrypt(&file_name_bytes)
 }
 
 fn encrypt_is_compressed(header_encryptor: &mut HeaderEncryptor, data: bool) -> Result<Vec<u8>, Error> {
@@ -91,7 +91,7 @@ fn encrypt_is_compressed(header_encryptor: &mut HeaderEncryptor, data: bool) -> 
         }
     );
 
-    header_encryptor.encrypt(&is_compressed_bytes, 16)
+    header_encryptor.encrypt(&is_compressed_bytes)
 }
 
 fn encrypt_data(key: &[u8], iv: &[u8], data: &[u8], buffer_size: usize) -> Result<Vec<u8>, Error> {
@@ -109,7 +109,7 @@ fn encrypt_data(key: &[u8], iv: &[u8], data: &[u8], buffer_size: usize) -> Resul
 
 #[cfg(test)]
 mod tests {
-    use crate::{encrypt, PlainContent};
+    use crate::{decrypt, encrypt, PlainContent};
     use crate::encrypt::create_iv;
 
     #[test]
@@ -124,7 +124,12 @@ mod tests {
 
     #[test]
     fn encrypt_and_decrypt() {
-        let content = PlainContent::new("test-file.txt".to_string(), "Hello World".as_bytes().to_vec());
+        let raw_content = *b"Hello World!";
+        let content = PlainContent::new("test-file.txt".to_string(), raw_content.to_vec());
         let encrypted = encrypt(&content, "secret").unwrap();
+        let decrypted = decrypt(&encrypted, "secret").unwrap();
+
+        assert_eq!(decrypted.file_name, "test-file.txt");
+        assert_eq!(&decrypted.content, &raw_content);
     }
 }

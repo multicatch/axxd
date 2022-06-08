@@ -1,9 +1,12 @@
+use aes::cipher::block_padding::ZeroPadding;
+use cbc::cipher::KeyIvInit;
+use aes::cipher::BlockEncryptMut;
 use crypto::aes::cbc_encryptor;
 use crypto::aes::KeySize::KeySize128;
-use crypto::blockmodes::{NoPadding, DecPadding, CbcDecryptor, CbcEncryptor, EncPadding};
+use crypto::blockmodes::{NoPadding, DecPadding, CbcDecryptor};
 use crypto::buffer::{RefReadBuffer, RefWriteBuffer};
 use crypto::symmetriccipher::{SymmetricCipherError, Decryptor, Encryptor};
-use crypto::aessafe::{AesSafe128Decryptor, AesSafe128Encryptor};
+use crypto::aessafe::{AesSafe128Decryptor};
 use crate::error::Error;
 
 pub struct HeaderDecryptor {
@@ -26,21 +29,28 @@ impl HeaderDecryptor {
 }
 
 pub struct HeaderEncryptor {
-    encryptor: Box<CbcEncryptor<AesSafe128Encryptor, EncPadding<NoPadding>>>
+    key: [u8; 16]
 }
+
+/// Due to a bug in rust-crypto, I cannot use AesSafe128Encryptor (I always get InvalidLength error).
+/// cbc crate seems to encrypt headers just fine.
+type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
 
 impl HeaderEncryptor {
     pub fn new(key: &[u8]) -> Result<HeaderEncryptor, SymmetricCipherError> {
         let buffer = encrypt_subkey(key, 2)?;
-        let aes_dec = AesSafe128Encryptor::new(&buffer);
         Ok(HeaderEncryptor {
-            encryptor:  Box::new(CbcEncryptor::new(aes_dec, NoPadding, vec![0u8; 16])),
+            key: buffer
         })
     }
 
-    pub fn encrypt(&mut self, input: &[u8], buffer_length: usize) -> Result<Vec<u8>, Error> {
-        self.encryptor.reset(&[0u8; 16]);
-        encrypt(self.encryptor.as_mut(), input, buffer_length)
+    pub fn encrypt(&mut self, input: &[u8]) -> Result<Vec<u8>, Error> {
+        let mut buffer = vec![0u8; input.len()];
+        buffer.copy_from_slice(input);
+
+        let result = Aes128CbcEnc::new(&self.key.into(), &[0u8; 16].into())
+            .encrypt_padded_vec_mut::<ZeroPadding>(&buffer);
+        Ok(result)
     }
 }
 

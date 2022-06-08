@@ -16,6 +16,8 @@ readme = "README.md"
 clap = "2.33.3"
 rpassword = "5.0.1"
 rust-crypto = "^0.2"
+cbc = { version = "0.1.2", features = ["alloc", "std"] }
+aes = "^0.8"
 flate2 = "1.0"
 encoding_rs = "0.8.28"
 
