@@ -56,6 +56,16 @@ impl KeyParams {
         }
     }
 
+    pub fn format_key_wrap(&self) -> Vec<u8> {
+        let mut result = vec![0u8; ITERATIONS_STARTS + ITERATIONS_LENGTH];
+        result[KEY_START..(KEY_START + KEY_LENGTH)].copy_from_slice(&self.wrapped_key);
+        result[SALT_START..(SALT_START + SALT_LENGTH)].copy_from_slice(&self.salt);
+        let iterations = u32::to_le_bytes(self.iterations);
+        result[ITERATIONS_STARTS..(ITERATIONS_STARTS + ITERATIONS_LENGTH)].copy_from_slice(&iterations);
+
+        result
+    }
+
     pub fn unwrap_key(&self, key: &[u8]) -> Result<Vec<u8>, Error> {
         let salted_key: Vec<u8> = xor(key, &self.salt);
 
