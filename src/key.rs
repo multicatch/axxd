@@ -1,7 +1,7 @@
-use crypto::aessafe::AesSafe128Decryptor;
-use crypto::blockmodes::{EcbDecryptor, NoPadding};
+use crypto::aessafe::{AesSafe128Decryptor, AesSafe128Encryptor};
+use crypto::blockmodes::{EcbDecryptor, EcbEncryptor, NoPadding};
 use crate::error::Error;
-use crate::header::decrypt;
+use crate::header::{decrypt, encrypt};
 use std::convert::TryInto;
 
 pub struct KeyParams {
@@ -23,9 +23,9 @@ const AES_KEY_LENGTH: u32 = 16;
 const KEY_ROUNDS_BASE: u64 = AES_KEY_LENGTH as u64 / 8;
 
 impl KeyParams {
-    pub fn generate() -> KeyParams {
-        let mut key = [0u8; KEY_LENGTH];
-        for byte in key.iter_mut() {
+    pub fn generate(secret: &[u8]) -> Result<KeyParams, Error> {
+        let mut aes_key = [0u8; 16];
+        for byte in aes_key.iter_mut() {
             *byte = rand::random();
         }
 
@@ -36,11 +36,11 @@ impl KeyParams {
         let iterations: u16 = rand::random();
         let iterations: u32 = (iterations + 5) as u32;
 
-        KeyParams {
-            wrapped_key: key.to_vec(),
+        Ok(KeyParams {
+            wrapped_key: wrap_key(secret, iterations, &salt, aes_key)?,
             salt: salt.to_vec(),
             iterations
-        }
+        })
     }
 
     pub fn parse(key_wrap: &[u8]) -> KeyParams {
@@ -84,6 +84,35 @@ impl KeyParams {
     }
 }
 
+fn wrap_key(key: &[u8], iterations: u32, salt: &[u8], key_to_wrap: [u8; 16]) -> Result<Vec<u8>, Error> {
+    let salted_key: Vec<u8> = xor(key, salt);
+
+    let mut result = [0u8; KEY_LENGTH].to_vec();
+    result[8..].copy_from_slice(&key_to_wrap);
+
+    let aes_enc = AesSafe128Encryptor::new(salted_key.as_slice());
+    let mut encryptor = Box::new(EcbEncryptor::new(aes_enc, NoPadding));
+
+    let rounds: u64 = KEY_ROUNDS_BASE * iterations as u64;
+    for t in 1..(rounds + 1) {
+        let second_start: usize = ((((t + 1) % KEY_ROUNDS_BASE) + 1) * 8) as usize;
+
+        let mut buffer = vec![0u8; 16];
+        buffer[0..8].copy_from_slice(&result[..8]);
+        buffer[8..16].copy_from_slice(&result[second_start..(second_start + 8)]);
+
+        encryptor.reset();
+        let buffer = encrypt(encryptor.as_mut(), buffer.as_slice(), 16)?;
+
+        result[second_start..(second_start + 8)].copy_from_slice(&buffer[8..]);
+
+        let block = xor(&buffer[..8], &t.to_le_bytes());
+        result[0..8].copy_from_slice(&block);
+    }
+
+    Ok(result)
+}
+
 fn xor(a: &[u8], b: &[u8]) -> Vec<u8> {
     a.iter()
         .zip(b.iter())
@@ -94,7 +123,7 @@ fn xor(a: &[u8], b: &[u8]) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use crate::key::KeyParams;
+    use crate::key::{KeyParams, wrap_key};
 
     #[test]
     fn unwrap_key() {
@@ -115,4 +144,24 @@ mod tests {
         assert_eq!(result.unwrap(), expected);
     }
 
+    #[test]
+    fn wrap_and_unwrap() {
+        let encryption_key: [u8; 16] = [0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F];
+
+        let aes_key = [237, 149, 127, 244, 80, 250, 212, 169, 7, 60, 73, 31, 165, 26, 13, 46];
+        let salt = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let iterations: u32 = 6;
+
+        let wrapped = wrap_key(&encryption_key, iterations, &salt, aes_key).unwrap();
+
+        let key_param = KeyParams {
+            wrapped_key: wrapped,
+            salt: salt.to_vec(),
+            iterations
+        };
+
+        let unwrapped = key_param.unwrap_key(&encryption_key).unwrap();
+
+        assert_eq!(&unwrapped, &aes_key);
+    }
 }

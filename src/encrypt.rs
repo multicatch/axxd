@@ -8,7 +8,7 @@ use crate::key::KeyParams;
 
 pub fn encrypt(data: &PlainContent, passphrase: &str) -> Result<EncryptedContent, Error> {
     let key = derive_key(passphrase);
-    let key_params = KeyParams::generate();
+    let key_params = KeyParams::generate(&key)?;
     let key = key_params.unwrap_key(&key)?;
 
     let mut header_encryptor = HeaderEncryptor::new(&key).unwrap();
