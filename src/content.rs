@@ -1,6 +1,8 @@
 use std::convert::TryInto;
 use std::collections::HashMap;
 use std::hash::Hash;
+use crate::content::HeaderBlockType::{Compression, Data, EncryptionInfo, FileInfo, FileNameInfo, KeyWrap1, Preamble, UnicodeFileNameInfo, Version};
+use crate::encrypt::GUID;
 use crate::error::Error;
 
 #[derive(Debug, FromPrimitive, Hash, Eq, PartialEq, Copy, Clone)]
@@ -24,6 +26,10 @@ pub enum HeaderBlockType {
     UnicodeFileNameInfo = 70,
 }
 
+pub trait RawBytes {
+    fn as_raw_bytes(&self) -> Vec<u8>;
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct PlainContent {
     pub file_name: String,
@@ -33,8 +39,15 @@ pub struct PlainContent {
 impl PlainContent {
     pub fn new(file_name: String, content: Vec<u8>) -> PlainContent {
         PlainContent {
-            file_name, content
+            file_name,
+            content,
         }
+    }
+}
+
+impl RawBytes for PlainContent {
+    fn as_raw_bytes(&self) -> Vec<u8> {
+        self.content.clone()
     }
 }
 
@@ -59,7 +72,7 @@ impl EncryptedContent {
         let mut block_type = HeaderBlockType::Unrecognized;
         let mut remaining = input;
 
-        while block_type != HeaderBlockType::Data && remaining.len() >= 5 {
+        while block_type != Data && remaining.len() >= 5 {
             let (bt, data, rem) = parse_block(remaining);
             block_type = bt;
             remaining = rem;
@@ -74,6 +87,41 @@ impl EncryptedContent {
 
     pub fn header(&self, header_type: &HeaderBlockType) -> Result<&Vec<u8>, Error> {
         self.headers.get(header_type).ok_or(Error::MissingHeader(*header_type))
+    }
+}
+
+const HEADERS_ORDER: [HeaderBlockType; 9] = [
+    Preamble,
+    Version,
+    KeyWrap1,
+    EncryptionInfo,
+    FileNameInfo,
+    UnicodeFileNameInfo,
+    Compression,
+    FileInfo,
+    Data,
+];
+
+impl RawBytes for EncryptedContent {
+
+    fn as_raw_bytes(&self) -> Vec<u8> {
+        let mut result = vec![];
+        result.extend_from_slice(&GUID);
+        for header_kind in HEADERS_ORDER {
+            let header_content = self.header(&header_kind);
+            if let Ok(content) = header_content {
+                let header_kind_bytes = [header_kind as u8];
+                let length: u32 = (5 + content.len()) as u32;
+                let length = length.to_le_bytes();
+                result.extend_from_slice(&length);
+                result.extend_from_slice(&header_kind_bytes);
+                result.extend_from_slice(content);
+            }
+        }
+
+        result.extend_from_slice(&self.content);
+
+        result
     }
 }
 
@@ -140,7 +188,7 @@ mod tests {
 
         assert_eq!(encrypted_content, EncryptedContent {
             headers: expected_headers,
-            content: vec![52, 95, 227, 92, 134, 151, 237, 129, 132, 254, 43, 74, 154, 210, 190, 253]
+            content: vec![52, 95, 227, 92, 134, 151, 237, 129, 132, 254, 43, 74, 154, 210, 190, 253],
         })
     }
 }

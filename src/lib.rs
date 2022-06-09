@@ -3,7 +3,7 @@ extern crate num_derive;
 extern crate rand;
 
 use crate::error::Error;
-use crate::content::{EncryptedContent, PlainContent};
+use crate::content::{EncryptedContent, PlainContent, RawBytes};
 use crate::decrypt::decrypt;
 use crate::encrypt::encrypt;
 use std::fs;
@@ -17,6 +17,8 @@ pub mod error;
 pub mod decrypt;
 pub mod cli;
 pub mod encrypt;
+
+pub type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
 
 pub fn decrypt_file<P: AsRef<Path>>(path: P, passphrase: &str) -> Result<PlainContent, Error> {
     let input = fs::read(&path).map_err(Error::Io)?;
@@ -35,15 +37,15 @@ pub fn encrypt_file<P: AsRef<Path>>(path: P, passphrase: &str) -> Result<Encrypt
     encrypt(&data, passphrase)
 }
 
-pub fn create_target_path<P: AsRef<Path>>(path: P, decrypted: &PlainContent) -> PathBuf {
-    let target_path = PathBuf::from(&decrypted.file_name);
+pub fn create_target_path<P: AsRef<Path>>(path: P, target: &str) -> PathBuf {
+    let target_path = PathBuf::from(target);
     path.as_ref()
         .parent()
         .map(|parent| parent.join(&target_path))
         .unwrap_or(target_path)
 }
 
-pub fn save_decrypted<P: AsRef<Path>>(decrypted: PlainContent, target_path: P) -> Result<P, Error> {
+pub fn save_decrypted<P: AsRef<Path>, B: RawBytes>(decrypted: B, target_path: P) -> Result<P, Error> {
     let mut file = fs::File::create(&target_path).map_err(Error::Io)?;
-    file.write_all(&decrypted.content).map(|_| target_path).map_err(Error::Io)
+    file.write_all(&decrypted.as_raw_bytes()).map(|_| target_path).map_err(Error::Io)
 }

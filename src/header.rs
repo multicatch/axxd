@@ -7,6 +7,7 @@ use crypto::blockmodes::{NoPadding, DecPadding, CbcDecryptor};
 use crypto::buffer::{RefReadBuffer, RefWriteBuffer};
 use crypto::symmetriccipher::{SymmetricCipherError, Decryptor, Encryptor};
 use crypto::aessafe::{AesSafe128Decryptor};
+use crate::Aes128CbcEnc;
 use crate::error::Error;
 
 pub struct HeaderDecryptor {
@@ -31,10 +32,6 @@ impl HeaderDecryptor {
 pub struct HeaderEncryptor {
     key: [u8; 16]
 }
-
-/// Due to a bug in rust-crypto, I cannot use AesSafe128Encryptor (I always get InvalidLength error).
-/// cbc crate seems to encrypt headers just fine.
-type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
 
 impl HeaderEncryptor {
     pub fn new(key: &[u8]) -> Result<HeaderEncryptor, SymmetricCipherError> {

@@ -1,11 +1,9 @@
 use std::collections::HashMap;
-use crypto::aes::cbc_encryptor;
-use crypto::aes::KeySize::KeySize128;
-use crypto::blockmodes::PkcsPadding;
-use crypto::buffer::{RefReadBuffer, RefWriteBuffer};
+use aes::cipher::block_padding::Pkcs7;
+use cbc::cipher::{BlockEncryptMut, KeyIvInit};
 use encoding_rs::{Encoding, UTF_8, WINDOWS_1252};
 use crate::decrypt::derive_key;
-use crate::{EncryptedContent, Error, PlainContent};
+use crate::{Aes128CbcEnc, EncryptedContent, Error, PlainContent};
 use crate::content::HeaderBlockType;
 use crate::content::HeaderBlockType::{Compression, Data, EncryptionInfo, FileNameInfo, KeyWrap1, UnicodeFileNameInfo, Version};
 use crate::header::{encrypt_subkey, HeaderEncryptor};
@@ -31,7 +29,7 @@ pub fn encrypt(data: &PlainContent, passphrase: &str) -> Result<EncryptedContent
                    data.content.len() as u64
     )?;
 
-    let encrypted = encrypt_data(&key, &iv, &data.content, data.content.len() + 16)?;
+    let encrypted = encrypt_data(&key, &iv, &data.content)?;
     Ok(EncryptedContent::new(headers, encrypted))
 }
 
@@ -42,7 +40,7 @@ fn create_iv() -> ([u8; 16], [u8; 24]) {
     }
 
     let mut padded_iv = [0u8; 24];
-    padded_iv[8..(actual_iv.len() + 8)].copy_from_slice(&actual_iv);
+    padded_iv[8..].copy_from_slice(&actual_iv);
     (actual_iv, padded_iv)
 }
 
@@ -94,17 +92,10 @@ fn encrypt_is_compressed(header_encryptor: &mut HeaderEncryptor, data: bool) -> 
     header_encryptor.encrypt(&is_compressed_bytes)
 }
 
-fn encrypt_data(key: &[u8], iv: &[u8], data: &[u8], buffer_size: usize) -> Result<Vec<u8>, Error> {
-    let mut read_buffer = RefReadBuffer::new(data);
-    let mut buffer_vec = vec![0u8; buffer_size];
-    let buffer = buffer_vec.as_mut_slice();
-    let mut write_buffer = RefWriteBuffer::new(buffer);
-
+fn encrypt_data(key: &[u8], iv: &[u8], data: &[u8]) -> Result<Vec<u8>, Error> {
     let data_key = encrypt_subkey(key, 3).map_err(Error::Cipher)?;
-    let mut encryptor = cbc_encryptor(KeySize128, &data_key, iv, PkcsPadding);
-    encryptor.encrypt(&mut read_buffer, &mut write_buffer, true).map_err(Error::Cipher)?;
-
-    Ok(buffer.to_vec())
+    Ok(Aes128CbcEnc::new(&data_key.into(), iv.into())
+        .encrypt_padded_vec_mut::<Pkcs7>(data))
 }
 
 #[cfg(test)]

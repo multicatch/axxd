@@ -1,19 +1,28 @@
-use crate::{decrypt_file, create_target_path, save_decrypted, PlainContent};
+use crate::{decrypt_file, create_target_path, save_decrypted, encrypt_file};
 use std::path::{PathBuf, Path};
 use clap::{App, Arg, ArgMatches};
 use std::io;
 use crate::error::Error;
 use std::process::exit;
+use crate::content::RawBytes;
 
 const FILE_PARAM: &str = "file";
 const PASSPHRASE_PARAM: &str = "passphrase";
 const OVERWRITE_PARAM: &str = "overwrite";
 const NO_OVERWRITE_PARAM: &str = "no-overwrite";
+const ENCRYPT_MODE: &str = "encrypt-mode";
 
 pub fn setup_args() -> ArgMatches<'static> {
     App::new("axxd")
         .version("0.1.0")
         .about("Axxd - an [axx] file [d]ecryptor")
+        .arg(
+            Arg::with_name(ENCRYPT_MODE)
+                .short("e")
+                .long("encrypt-mode")
+                .help("Use encryption instead of decryption")
+                .takes_value(false)
+        )
         .arg(
             Arg::with_name(FILE_PARAM)
                 .short("f")
@@ -49,6 +58,33 @@ pub fn setup_args() -> ArgMatches<'static> {
         .get_matches()
 }
 
+pub fn decrypt_or_encrypt(args: ArgMatches) {
+    let encrypt = args.is_present(ENCRYPT_MODE);
+    if encrypt {
+        cli_encrypt(args)
+    } else {
+        cli_decrypt(args)
+    }
+}
+
+pub fn cli_encrypt(args: ArgMatches) {
+    let overwrite = should_overwrite(&args);
+    let (filename, pass) = retrieve_params(args);
+
+    println!("Encrypting {}...", filename);
+    let source_file = PathBuf::from(filename.clone());
+    match encrypt_file(&source_file, &pass) {
+        Ok(content) => {
+            let new_file_name = format!("{}.axx", filename);
+            prompt_save_file_cli(source_file, &new_file_name, content, overwrite);
+        }
+        Err(e) => {
+            println!("Cannot decrypt file.");
+            display_error_and_quit(e);
+        }
+    }
+}
+
 pub fn cli_decrypt(args: ArgMatches) {
     let overwrite = should_overwrite(&args);
     let (filename, pass) = retrieve_params(args);
@@ -57,7 +93,8 @@ pub fn cli_decrypt(args: ArgMatches) {
     let source_file = PathBuf::from(filename);
     match decrypt_file(&source_file, &pass) {
         Ok(content) => {
-            prompt_save_file_cli(source_file, content, overwrite);
+            let new_file_name = content.file_name.clone();
+            prompt_save_file_cli(source_file, &new_file_name, content, overwrite);
         }
         Err(e) => {
             println!("Cannot decrypt file.");
@@ -131,8 +168,8 @@ fn display_error_and_quit(e: Error) {
     exit(254);
 }
 
-fn prompt_save_file_cli<P: AsRef<Path>>(source_file: P, content: PlainContent, overwrite: Option<bool>) {
-    let target_path = create_target_path(&source_file, &content);
+fn prompt_save_file_cli<P: AsRef<Path>, B: RawBytes>(source_file: P, target: &str, content: B, overwrite: Option<bool>) {
+    let target_path = create_target_path(&source_file, target);
     println!("File successfully decrypted. Saving into {:?}.", target_path);
 
     if target_path.exists() {
