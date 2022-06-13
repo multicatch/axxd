@@ -30,7 +30,11 @@ pub fn encrypt(data: &PlainContent, passphrase: &str) -> Result<EncryptedContent
     )?;
 
     let encrypted = encrypt_data(&key, &iv, &data.content)?;
-    Ok(EncryptedContent::new(headers, encrypted))
+
+    let hmac_key = encrypt_subkey(&key, 0)
+        .map_err(Error::Cipher)?;
+
+    Ok(EncryptedContent::new(headers, encrypted, hmac_key))
 }
 
 fn create_iv() -> ([u8; 16], [u8; 24]) {
@@ -52,7 +56,6 @@ fn insert_headers(
     file_name: &str,
     buffer_size: u64,
 ) -> Result<(), Error> {
-    // TODO: headers.insert(Preamble, vec![249, 175, 46, 103, 125, 207, 201, 254, 6, 75, 57, 8, 231, 90, 135, 129]);
     headers.insert(Version, vec![3, 0, 0, 0, 0, 0, 0, 0]);
     headers.insert(KeyWrap1, key_params.format_key_wrap());
     headers.insert(EncryptionInfo, header_encryptor.encrypt(padded_iv)?);

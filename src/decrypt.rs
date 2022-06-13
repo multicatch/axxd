@@ -131,6 +131,7 @@ mod tests {
         let encrypted_content = EncryptedContent {
             headers,
             content: vec![52, 95, 227, 92, 134, 151, 237, 129, 132, 254, 43, 74, 154, 210, 190, 253],
+            hmac_key: [0u8; 16]
         };
 
         let expected = PlainContent {

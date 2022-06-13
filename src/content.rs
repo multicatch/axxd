@@ -4,6 +4,7 @@ use std::hash::Hash;
 use crate::content::HeaderBlockType::{Compression, Data, EncryptionInfo, FileInfo, FileNameInfo, KeyWrap1, Preamble, UnicodeFileNameInfo, Version};
 use crate::encrypt::GUID;
 use crate::error::Error;
+use crate::hmacsha::AxHmacSha1;
 
 #[derive(Debug, FromPrimitive, Hash, Eq, PartialEq, Copy, Clone)]
 pub enum HeaderBlockType {
@@ -55,13 +56,15 @@ impl RawBytes for PlainContent {
 pub struct EncryptedContent {
     pub headers: HashMap<HeaderBlockType, Vec<u8>>,
     pub content: Vec<u8>,
+    pub hmac_key: [u8; 16],
 }
 
 impl EncryptedContent {
-    pub fn new(headers: HashMap<HeaderBlockType, Vec<u8>>, content: Vec<u8>) -> EncryptedContent {
+    pub fn new(headers: HashMap<HeaderBlockType, Vec<u8>>, content: Vec<u8>, hmac_key: [u8; 16]) -> EncryptedContent {
         EncryptedContent {
             headers,
             content,
+            hmac_key,
         }
     }
 
@@ -82,6 +85,7 @@ impl EncryptedContent {
         EncryptedContent {
             headers,
             content: remaining.to_vec(),
+            hmac_key: [0u8; 16],
         }
     }
 
@@ -102,22 +106,41 @@ const HEADERS_ORDER: [HeaderBlockType; 9] = [
     Data,
 ];
 
-impl RawBytes for EncryptedContent {
+const EMPTY_PREAMBLE_HEADER: [u8; 5 + 16] = [0x15, 0x00, 0x00, 0x00, 0x02,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
 
+impl RawBytes for EncryptedContent {
     fn as_raw_bytes(&self) -> Vec<u8> {
         let mut result = vec![];
         result.extend_from_slice(&GUID);
+        result.extend_from_slice(&EMPTY_PREAMBLE_HEADER);
+
+        let mut hmac_sha1 = AxHmacSha1::new(&self.hmac_key);
+
         for header_kind in HEADERS_ORDER {
             let header_content = self.header(&header_kind);
             if let Ok(content) = header_content {
                 let header_kind_bytes = [header_kind as u8];
                 let length: u32 = (5 + content.len()) as u32;
                 let length = length.to_le_bytes();
-                result.extend_from_slice(&length);
-                result.extend_from_slice(&header_kind_bytes);
-                result.extend_from_slice(content);
+
+                let mut header_block: Vec<u8> = vec![];
+
+                header_block.extend_from_slice(&length);
+                header_block.extend_from_slice(&header_kind_bytes);
+                header_block.extend_from_slice(content);
+
+                hmac_sha1.input(&header_block);
+
+                result.extend_from_slice(&header_block);
             }
         }
+
+        let mac_result = hmac_sha1.result();
+        let hmac = mac_result.code();
+
+        let preamble_start = GUID.len() + 5;
+        result[preamble_start..(preamble_start + 16)].copy_from_slice(&hmac[..16]);
 
         result.extend_from_slice(&self.content);
 
@@ -189,6 +212,7 @@ mod tests {
         assert_eq!(encrypted_content, EncryptedContent {
             headers: expected_headers,
             content: vec![52, 95, 227, 92, 134, 151, 237, 129, 132, 254, 43, 74, 154, 210, 190, 253],
+            hmac_key: [0u8; 16]
         })
     }
 }

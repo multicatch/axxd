@@ -76,6 +76,7 @@ pub fn cli_encrypt(args: ArgMatches) {
     match encrypt_file(&source_file, &pass) {
         Ok(content) => {
             let new_file_name = format!("{}.axx", filename);
+            println!("File successfully encrypted.");
             prompt_save_file_cli(source_file, &new_file_name, content, overwrite);
         }
         Err(e) => {
@@ -94,6 +95,7 @@ pub fn cli_decrypt(args: ArgMatches) {
     match decrypt_file(&source_file, &pass) {
         Ok(content) => {
             let new_file_name = content.file_name.clone();
+            println!("File successfully decrypted.");
             prompt_save_file_cli(source_file, &new_file_name, content, overwrite);
         }
         Err(e) => {
@@ -170,7 +172,7 @@ fn display_error_and_quit(e: Error) {
 
 fn prompt_save_file_cli<P: AsRef<Path>, B: RawBytes>(source_file: P, target: &str, content: B, overwrite: Option<bool>) {
     let target_path = create_target_path(&source_file, target);
-    println!("File successfully decrypted. Saving into {:?}.", target_path);
+    println!("Saving into {:?}.", target_path);
 
     if target_path.exists() {
         print!("WARNING: File already exits. ");

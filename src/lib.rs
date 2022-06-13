@@ -17,6 +17,7 @@ pub mod error;
 pub mod decrypt;
 pub mod cli;
 pub mod encrypt;
+mod hmacsha;
 
 pub type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
 
