@@ -20,6 +20,7 @@ pub mod encrypt;
 mod hmacsha;
 
 pub type Aes128CbcEnc = cbc::Encryptor<aes::Aes128>;
+pub type Aes128CbcDec = cbc::Decryptor<aes::Aes128>;
 
 pub fn decrypt_file<P: AsRef<Path>>(path: P, passphrase: &str) -> Result<PlainContent, Error> {
     let input = fs::read(&path).map_err(Error::Io)?;

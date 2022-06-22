@@ -1,7 +1,7 @@
 use std::convert::TryInto;
 use std::collections::HashMap;
 use std::hash::Hash;
-use crate::content::HeaderBlockType::{Compression, Data, EncryptionInfo, FileInfo, FileNameInfo, KeyWrap1, Preamble, UnicodeFileNameInfo, Version};
+use crate::content::HeaderBlockType::{Compression, CompressionInfo, Data, EncryptionInfo, FileInfo, FileNameInfo, KeyWrap1, Preamble, UnicodeFileNameInfo, Version};
 use crate::encrypt::GUID;
 use crate::error::Error;
 use crate::hmacsha::AxHmacSha1;
@@ -94,15 +94,16 @@ impl EncryptedContent {
     }
 }
 
-const HEADERS_ORDER: [HeaderBlockType; 9] = [
+const HEADERS_ORDER: [HeaderBlockType; 10] = [
     Preamble,
-    Version,
-    KeyWrap1,
     EncryptionInfo,
+    Compression,
+    CompressionInfo,
+    FileInfo,
     FileNameInfo,
     UnicodeFileNameInfo,
-    Compression,
-    FileInfo,
+    KeyWrap1,
+    Version,
     Data,
 ];
 

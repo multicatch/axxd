@@ -166,6 +166,9 @@ fn display_error_and_quit(e: Error) {
         Error::MalformedContent { description, content } => {
             println!("Cannot read metadata from file. \n{}, encountered on {:?}", description, content);
         }
+        Error::CbcUnpadError(e) => {
+            println!("Encrypted data is probably corrupted. \nDetails {:?}", e);
+        }
     }
     exit(254);
 }

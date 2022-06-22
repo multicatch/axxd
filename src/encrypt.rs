@@ -5,7 +5,7 @@ use encoding_rs::{Encoding, UTF_8, WINDOWS_1252};
 use crate::decrypt::derive_key;
 use crate::{Aes128CbcEnc, EncryptedContent, Error, PlainContent};
 use crate::content::HeaderBlockType;
-use crate::content::HeaderBlockType::{Compression, Data, EncryptionInfo, FileNameInfo, KeyWrap1, UnicodeFileNameInfo, Version};
+use crate::content::HeaderBlockType::{Compression, Data, EncryptionInfo, FileInfo, FileNameInfo, KeyWrap1, UnicodeFileNameInfo, Version};
 use crate::header::{encrypt_subkey, HeaderEncryptor};
 use crate::key::KeyParams;
 
@@ -17,7 +17,7 @@ pub fn encrypt(data: &PlainContent, passphrase: &str) -> Result<EncryptedContent
     let key = key_params.unwrap_key(&key)?;
 
     let mut header_encryptor = HeaderEncryptor::new(&key).unwrap();
-    let (iv, padded_iv) = create_iv();
+    let (iv, padded_iv) = create_iv(data.content.len() as u64);
 
     let mut headers: HashMap<HeaderBlockType, Vec<u8>> = HashMap::new();
 
@@ -37,13 +37,14 @@ pub fn encrypt(data: &PlainContent, passphrase: &str) -> Result<EncryptedContent
     Ok(EncryptedContent::new(headers, encrypted, hmac_key))
 }
 
-fn create_iv() -> ([u8; 16], [u8; 24]) {
+fn create_iv(plaintext_size: u64) -> ([u8; 16], [u8; 24]) {
     let mut actual_iv = [0u8; 16];
     for item in &mut actual_iv {
         *item = rand::random();
     }
 
     let mut padded_iv = [0u8; 24];
+    padded_iv[..8].copy_from_slice(&plaintext_size.to_le_bytes());
     padded_iv[8..].copy_from_slice(&actual_iv);
     (actual_iv, padded_iv)
 }
@@ -56,14 +57,16 @@ fn insert_headers(
     file_name: &str,
     buffer_size: u64,
 ) -> Result<(), Error> {
-    headers.insert(Version, vec![3, 0, 0, 0, 0, 0, 0, 0]);
+    headers.insert(Version, vec![0x03, 0x02, 0x01, 0x06, 0x04, 0x46, 0x7c, 0x7f]);
     headers.insert(KeyWrap1, key_params.format_key_wrap());
     headers.insert(EncryptionInfo, header_encryptor.encrypt(padded_iv)?);
     headers.insert(FileNameInfo, encrypt_file_name(header_encryptor, file_name, WINDOWS_1252)?);
     headers.insert(UnicodeFileNameInfo, encrypt_file_name(header_encryptor, file_name, UTF_8)?);
     headers.insert(Compression, encrypt_is_compressed(header_encryptor, false)?);
-    //headers.insert(CompressionInfo, vec![44, 168, 59, 140, 101, 162, 228, 35, 23, 253, 23, 153, 146, 39, 123, 145]);
-    // TODO: headers.insert(FileInfo, vec![154, 34, 179, 201, 119, 228, 149, 36, 157, 188, 130, 68, 59, 136, 84, 161, 58, 55, 160, 188, 233, 51, 110, 17, 122, 104, 161, 5, 127, 15, 84, 44]);
+    // TODO: Add timestamps in FileInfo
+    headers.insert(FileInfo, header_encryptor.encrypt(&[
+        179, 188, 189, 84, 32, 127, 216, 1, 201, 196, 251, 84, 32, 127, 216, 1, 112, 67, 199, 84, 32, 127, 216, 1, 105, 250, 171, 161, 40, 219, 43, 240
+    ])?);
     headers.insert(Data, buffer_size.to_le_bytes().to_vec());
     Ok(())
 }
@@ -108,12 +111,12 @@ mod tests {
 
     #[test]
     fn test_iv_generation() {
-        let (iv, padded) = create_iv();
+        let (iv, padded) = create_iv(123);
 
         let iv: &[u8] = &iv;
-        let padded: &[u8] = &padded[8..];
 
-        assert_eq!(iv, padded);
+        assert_eq!(iv, &padded[8..]);
+        assert_eq!(&(123u64.to_le_bytes()), &padded[..8]);
     }
 
     #[test]

@@ -1,18 +1,17 @@
 use crate::error::Error;
 use crate::content::{EncryptedContent, PlainContent};
 use crate::header::{HeaderDecryptor, encrypt_subkey};
-use crate::content::HeaderBlockType::{EncryptionInfo, KeyWrap1, FileNameInfo, Compression, Data};
-use crypto::blockmodes::PkcsPadding;
-use crypto::aes::KeySize::KeySize128;
-use crypto::aes::cbc_decryptor;
-use crypto::buffer::{RefWriteBuffer, RefReadBuffer};
+use crate::content::HeaderBlockType::{EncryptionInfo, KeyWrap1, FileNameInfo, Compression};
 use std::convert::TryInto;
 use flate2::read::ZlibDecoder;
 use std::io::Read;
+use cbc::cipher::block_padding::Pkcs7;
+use cbc::cipher::{BlockDecryptMut, KeyIvInit};
 use crypto::sha1::Sha1;
 use crate::key::KeyParams;
 use crypto::digest::Digest;
 use encoding_rs::WINDOWS_1252;
+use crate::Aes128CbcDec;
 
 pub fn decrypt(data: &EncryptedContent, passphrase: &str) -> Result<PlainContent, Error> {
     let key = derive_key(passphrase);
@@ -22,9 +21,8 @@ pub fn decrypt(data: &EncryptedContent, passphrase: &str) -> Result<PlainContent
     let iv = extract_iv(&mut header_decryptor, data)?;
     let file_name = extract_file_name(&mut header_decryptor, data)?;
     let is_compressed = extract_is_compressed(&mut header_decryptor, data)?;
-    let buffer_size = extract_buffer_size(data)?;
 
-    decrypt_data(&key, &iv, &data.content, buffer_size).and_then(|buffer| {
+    decrypt_data(&key, &iv, &data.content).and_then(|buffer| {
         if is_compressed {
             decompress(&buffer)
         } else {
@@ -47,17 +45,12 @@ pub fn derive_key(password: &str) -> [u8; 16] {
     result
 }
 
-fn decrypt_data(key: &[u8], iv: &[u8], data: &[u8], buffer_size: usize) -> Result<Vec<u8>, Error> {
-    let mut read_buffer = RefReadBuffer::new(data);
-    let mut buffer_vec = vec![0u8; buffer_size];
-    let buffer = buffer_vec.as_mut_slice();
-    let mut write_buffer = RefWriteBuffer::new(buffer);
-
+fn decrypt_data(key: &[u8], iv: &[u8], data: &[u8]) -> Result<Vec<u8>, Error> {
     let data_key = encrypt_subkey(key, 3).map_err(Error::Cipher)?;
-    let mut decryptor = cbc_decryptor(KeySize128, &data_key, iv, PkcsPadding);
-    decryptor.decrypt(&mut read_buffer, &mut write_buffer, true).map_err(Error::Cipher)?;
 
-    Ok(buffer.to_vec())
+    Aes128CbcDec::new(&data_key.into(), iv.into())
+        .decrypt_padded_vec_mut::<Pkcs7>(data)
+        .map_err(Error::CbcUnpadError)
 }
 
 fn extract_master_key(data: &EncryptedContent, key: &[u8]) -> Result<Vec<u8>, Error> {
@@ -93,15 +86,6 @@ fn extract_is_compressed(header_decryptor: &mut HeaderDecryptor, data: &Encrypte
         content: is_compressed_bytes.to_vec(),
     })?;
     Ok(i32::from_le_bytes(is_compressed) != 0)
-}
-
-fn extract_buffer_size(data: &EncryptedContent) -> Result<usize, Error> {
-    let buffer_size = data.header(&Data)?;
-    let buffer_size: [u8; 8] = buffer_size.as_slice().try_into().map_err(|_| Error::MalformedContent {
-        description: "Wrong format of data length".to_string(),
-        content: buffer_size.to_vec(),
-    })?;
-    Ok(usize::from_le_bytes(buffer_size))
 }
 
 fn decompress(buffer: &[u8]) -> Result<Vec<u8>, Error> {
