@@ -6,6 +6,8 @@ This tool can decrypt AxCrypt-encrypted files.
 I made this because I needed a simple native tool to decrypt axx files on Linux
 and I didn't want to use WINE.
 
+The AxCrypt 2.x support was added thanks to [T1erno](https://github.com/T1erno) 
+
 ## Usage
 
 The newest standalone version can be downladed from GitHub Releases or build from sources using `cargo build --release`.
