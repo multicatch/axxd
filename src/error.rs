@@ -1,12 +1,11 @@
 use std::io;
-use crypto::symmetriccipher::SymmetricCipherError;
-use crate::content::HeaderBlockType;
 use std::string::FromUtf8Error;
+use crate::content::HeaderBlockType;
 
 #[derive(Debug)]
 pub enum Error {
     Io(io::Error),
-    Cipher(SymmetricCipherError),
+    Cipher(String),
     MissingHeader(HeaderBlockType),
     FileNameEncoding(FromUtf8Error),
     MalformedContent {

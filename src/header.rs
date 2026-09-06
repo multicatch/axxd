@@ -1,53 +1,43 @@
-use crypto::aes::cbc_encryptor;
-use crypto::aes::KeySize::KeySize128;
-use crypto::blockmodes::{NoPadding, DecPadding, CbcDecryptor};
-use crypto::buffer::{RefReadBuffer, RefWriteBuffer};
-use crypto::symmetriccipher::{SymmetricCipherError, Decryptor};
-use crypto::aessafe::AesSafe128Decryptor;
+use cipher::KeyIvInit;
+use aes::Aes128;
+use cipher::{BlockDecryptMut, BlockEncrypt, KeyInit};
 use crate::error::Error;
 
 pub struct HeaderDecryptor {
-    decryptor: Box<CbcDecryptor<AesSafe128Decryptor, DecPadding<NoPadding>>>,
+    key: [u8; 16],
 }
 
 impl HeaderDecryptor {
-    pub fn new(key: &[u8]) -> Result<HeaderDecryptor, SymmetricCipherError> {
+    pub fn new(key: &[u8]) -> Result<HeaderDecryptor, Error> {
         let buffer = encrypt_subkey(key, 2)?;
-        let aes_dec = AesSafe128Decryptor::new(&buffer);
-        Ok(HeaderDecryptor {
-            decryptor:  Box::new(CbcDecryptor::new(aes_dec, NoPadding, vec![0u8; 16])),
-        })
+        Ok(HeaderDecryptor { key: buffer })
     }
 
     pub fn decrypt(&mut self, input: &[u8], buffer_length: usize) -> Result<Vec<u8>, Error> {
-        self.decryptor.reset(&[0u8; 16]);
-        decrypt(self.decryptor.as_mut(), input, buffer_length)
+        type Aes128CbcDec = cbc::Decryptor<Aes128>;
+        let mut buf = input.to_vec();
+        let decryptor = Aes128CbcDec::new_from_slices(&self.key, &[0u8; 16])
+            .map_err(|e| Error::Cipher(format!("{:?}", e)))?;
+        decryptor.decrypt_padded_mut::<cipher::block_padding::NoPadding>(&mut buf)
+            .map_err(|e| Error::Cipher(format!("{:?}", e)))?;
+
+        let mut result = vec![0u8; buffer_length];
+        let copy_len = buf.len().min(buffer_length);
+        result[..copy_len].copy_from_slice(&buf[..copy_len]);
+        Ok(result)
     }
 }
 
-pub fn encrypt_subkey(key: &[u8], zero_block: u8) -> Result<[u8; 16], SymmetricCipherError> {
+pub fn encrypt_subkey(key: &[u8], zero_block: u8) -> Result<[u8; 16], Error> {
     let mut block = [0u8; 16];
     block[0] = zero_block;
 
-    let mut read_buffer = RefReadBuffer::new(&block);
-    let mut buffer = [0u8; 16];
-    let mut write_buffer = RefWriteBuffer::new(&mut buffer);
+    let cipher = Aes128::new_from_slice(key)
+        .map_err(|e| Error::Cipher(format!("{:?}", e)))?;
+    let block_ref = cipher::generic_array::GenericArray::from_mut_slice(&mut block);
+    cipher.encrypt_block(block_ref);
 
-    let mut encryptor = cbc_encryptor(KeySize128, key, &[0u8; 16], NoPadding);
-    encryptor.encrypt(&mut read_buffer, &mut write_buffer, true)?;
-
-    Ok(buffer)
-}
-
-pub fn decrypt(decryptor: &mut dyn Decryptor, input: &[u8], buffer_length: usize) -> Result<Vec<u8>, Error> {
-    let mut read_buffer = RefReadBuffer::new(input);
-    let mut empty_vec = vec![0; buffer_length];
-    let buffer: &mut [u8] = empty_vec.as_mut_slice();
-    let mut write_buffer = RefWriteBuffer::new(buffer);
-
-    decryptor.decrypt(&mut read_buffer, &mut write_buffer, true).map_err(Error::Cipher)?;
-
-    Ok(buffer.to_vec())
+    Ok(block)
 }
 
 #[cfg(test)]
@@ -67,7 +57,7 @@ mod tests {
 
         for (i, expected) in expected_results.iter().enumerate() {
             let result = encrypt_subkey(&pass, i as u8);
-            assert_eq!(matches!(result.err(), Some(_)), false);
+            assert_eq!(matches!(result.as_ref().err(), Some(_)), false);
             assert_eq!(result.ok(), Some(*expected));
         }
     }
@@ -78,7 +68,7 @@ mod tests {
         let expected: [u8; 16] = [198, 161, 59, 55, 135, 143, 91, 130, 111, 79, 129, 98, 161, 200, 216, 121];
 
         let result = encrypt_subkey(&pass, 5);
-        assert_eq!(matches!(result.err(), Some(_)), false);
+        assert_eq!(matches!(result.as_ref().err(), Some(_)), false);
         assert_ne!(result.ok(), Some(expected));
     }
 }
