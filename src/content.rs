@@ -1,6 +1,7 @@
 use std::convert::TryInto;
 use std::collections::HashMap;
-use std::hash::Hash;
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 use crate::error::Error;
 
 #[derive(Debug, FromPrimitive, Hash, Eq, PartialEq, Copy, Clone)]
@@ -12,6 +13,10 @@ pub enum HeaderBlockType {
     KeyWrap1 = 4,
     KeyWrap2 = 5,
     IdTag = 6,
+    Hmac = 11,
+    SymmetricKeyWrap = 13,
+    RsaKeyWrap = 14,
+    DataV2 = 20,
     Unrecognized = 61,
     Undefined = 62,
     Data = 63,
@@ -22,6 +27,9 @@ pub enum HeaderBlockType {
     FileInfo = 68,
     Compression = 69,
     UnicodeFileNameInfo = 70,
+    PlaintextLengths = 101,
+    Recipients = 102,
+    AlgorithmVerifier = 103,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -31,7 +39,7 @@ pub struct EncryptedContent<'a> {
 }
 
 impl<'a> EncryptedContent<'a> {
-    pub fn parse(input: &[u8]) -> EncryptedContent {
+    pub fn parse(input: &[u8]) -> EncryptedContent<'_> {
         let (_, input) = slice_guid(input);
 
         let mut headers: HashMap<HeaderBlockType, &[u8]> = HashMap::new();
@@ -61,7 +69,7 @@ fn parse_block(input: &[u8]) -> (HeaderBlockType, &[u8], &[u8]) {
     let header_length = u32::from_le_bytes(header_length.try_into().unwrap()) - 5;
 
     let (block_type, remaining) = remaining.split_at(1);
-    let block_type = num::FromPrimitive::from_u8(block_type[0]).unwrap_or(HeaderBlockType::Unrecognized);
+    let block_type = FromPrimitive::from_u8(block_type[0]).unwrap_or(HeaderBlockType::Unrecognized);
     let (data, remaining) = remaining.split_at(header_length as usize);
 
     (block_type, data, remaining)

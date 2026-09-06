@@ -1,7 +1,6 @@
-use crypto::aessafe::AesSafe128Decryptor;
-use crypto::blockmodes::{EcbDecryptor, NoPadding};
+use aes::Aes128;
+use cipher::{BlockDecrypt, KeyInit};
 use crate::error::Error;
-use crate::header::decrypt;
 use std::convert::TryInto;
 
 pub struct KeyParams<'a> {
@@ -23,7 +22,7 @@ const AES_KEY_LENGTH: u32 = 16;
 const KEY_ROUNDS_BASE: u64 = AES_KEY_LENGTH as u64 / 8;
 
 impl<'a> KeyParams<'a> {
-    pub fn parse(key_wrap: &[u8]) -> KeyParams {
+    pub fn parse(key_wrap: &[u8]) -> KeyParams<'_> {
         let key = &key_wrap[KEY_START..(KEY_START + KEY_LENGTH)];
         let salt = &key_wrap[SALT_START..(SALT_START + SALT_LENGTH)];
         let iterations = &key_wrap[ITERATIONS_STARTS..(ITERATIONS_STARTS + ITERATIONS_LENGTH)];
@@ -38,26 +37,26 @@ impl<'a> KeyParams<'a> {
 
     pub fn unwrap_key(&self, key: &[u8]) -> Result<Vec<u8>, Error> {
         let salted_key: Vec<u8> = xor(key, self.salt);
-
         let mut wrapped = self.wrapped_key.to_vec();
 
-        let aes_dec = AesSafe128Decryptor::new(salted_key.as_slice());
-        let mut decryptor = Box::new(EcbDecryptor::new(aes_dec, NoPadding));
+        let cipher = Aes128::new_from_slice(salted_key.as_slice())
+            .map_err(|e| Error::Cipher(format!("{:?}", e)))?;
 
         let rounds: u64 = KEY_ROUNDS_BASE * self.iterations as u64;
         for t in (1..(rounds + 1)).rev() {
-            let block = &wrapped[0..8];
-            let mut block = xor(block, &t.to_le_bytes());
+            let mut block = [0u8; 16];
+            let t_bytes = t.to_le_bytes();
+            for i in 0..8 {
+                block[i] = wrapped[i] ^ t_bytes[i];
+            }
             let second_start: usize = ((((t + 1) % KEY_ROUNDS_BASE) + 1) * 8) as usize;
+            block[8..16].copy_from_slice(&wrapped[second_start..(second_start + 8)]);
 
-            block.extend_from_slice(&wrapped[second_start..(second_start + 8)]);
+            let block_ref = cipher::generic_array::GenericArray::from_mut_slice(&mut block);
+            cipher.decrypt_block(block_ref);
 
-            decryptor.reset();
-            let buffer = decrypt(decryptor.as_mut(), block.as_slice(), 16)?;
-
-            let (first_half, second_half) = buffer.split_at(8);
-            wrapped.splice(..8, first_half.to_vec());
-            wrapped.splice(second_start..(second_start + 8), second_half.to_vec());
+            wrapped[..8].copy_from_slice(&block[..8]);
+            wrapped[second_start..(second_start + 8)].copy_from_slice(&block[8..16]);
         }
 
         Ok(wrapped[8..].to_vec())
@@ -70,7 +69,6 @@ fn xor(a: &[u8], b: &[u8]) -> Vec<u8> {
         .map(|(x1, x2)| *x1 ^ *x2)
         .collect::<Vec<u8>>()
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -94,5 +92,4 @@ mod tests {
         let expected: Vec<u8> = vec![237, 149, 127, 244, 80, 250, 212, 169, 7, 60, 73, 31, 165, 26, 13, 46];
         assert_eq!(result.unwrap(), expected);
     }
-
 }

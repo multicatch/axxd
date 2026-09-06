@@ -13,7 +13,7 @@ const NO_OVERWRITE_PARAM: &str = "no-overwrite";
 
 pub fn setup_args() -> ArgMatches<'static> {
     App::new("axxd")
-        .version("0.1.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .about("Axxd - an [axx] file [d]ecryptor")
         .arg(
             Arg::with_name(FILE_PARAM)

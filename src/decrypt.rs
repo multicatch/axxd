@@ -1,17 +1,16 @@
+use cipher::KeyIvInit;
 use crate::error::Error;
-use crate::content::EncryptedContent;
+use crate::content::{EncryptedContent, HeaderBlockType};
 use crate::header::{HeaderDecryptor, encrypt_subkey};
 use crate::content::HeaderBlockType::{EncryptionInfo, KeyWrap1, FileNameInfo, Compression, Data};
-use crypto::blockmodes::PkcsPadding;
-use crypto::aes::KeySize::KeySize128;
-use crypto::aes::cbc_decryptor;
-use crypto::buffer::{RefWriteBuffer, RefReadBuffer};
+use crate::key::KeyParams;
+use crate::v2::decrypt_v2;
+use aes::Aes128;
+use cipher::BlockDecryptMut;
 use std::convert::TryInto;
 use flate2::read::ZlibDecoder;
 use std::io::Read;
-use crypto::sha1::Sha1;
-use crate::key::KeyParams;
-use crypto::digest::Digest;
+use sha1::{Sha1, Digest};
 use encoding_rs::WINDOWS_1252;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -21,10 +20,18 @@ pub struct PlainContent {
 }
 
 pub fn decrypt(data: &EncryptedContent, passphrase: &str) -> Result<PlainContent, Error> {
+    if data.headers.contains_key(&HeaderBlockType::SymmetricKeyWrap) {
+        decrypt_v2(data, passphrase)
+    } else {
+        decrypt_v1(data, passphrase)
+    }
+}
+
+pub fn decrypt_v1(data: &EncryptedContent, passphrase: &str) -> Result<PlainContent, Error> {
     let key = derive_key(passphrase);
     let key = extract_master_key(data, &key)?;
 
-    let mut header_decryptor = HeaderDecryptor::new(&key).unwrap();
+    let mut header_decryptor = HeaderDecryptor::new(&key)?;
     let iv = extract_iv(&mut header_decryptor, data)?;
     let file_name = extract_file_name(&mut header_decryptor, data)?;
     let is_compressed = extract_is_compressed(&mut header_decryptor, data)?;
@@ -43,27 +50,29 @@ pub fn decrypt(data: &EncryptedContent, passphrase: &str) -> Result<PlainContent
 }
 
 fn derive_key(password: &str) -> [u8; 16] {
-    let mut key = [0; 20];
     let mut sha1 = Sha1::new();
     let (pass_bytes, _, _) = WINDOWS_1252.encode(password);
-    sha1.input(pass_bytes.as_ref());
-    sha1.result(&mut key);
+    sha1.update(pass_bytes.as_ref());
+    let key = sha1.finalize();
     let mut result: [u8; 16] = Default::default();
     result.copy_from_slice(&key[0..16]);
     result
 }
 
 fn decrypt_data(key: &[u8], iv: &[u8], data: &[u8], buffer_size: usize) -> Result<Vec<u8>, Error> {
-    let mut read_buffer = RefReadBuffer::new(data);
-    let mut buffer_vec = vec![0u8; buffer_size];
-    let buffer = buffer_vec.as_mut_slice();
-    let mut write_buffer = RefWriteBuffer::new(buffer);
+    let data_key = encrypt_subkey(key, 3)?;
+    type Aes128CbcDec = cbc::Decryptor<Aes128>;
+    let mut buf = data.to_vec();
+    let decryptor = Aes128CbcDec::new_from_slices(&data_key, iv)
+        .map_err(|e| Error::Cipher(format!("{:?}", e)))?;
+    let unpadded = decryptor.decrypt_padded_mut::<cipher::block_padding::Pkcs7>(&mut buf)
+        .map_err(|e| Error::Cipher(format!("{:?}", e)))?;
 
-    let data_key = encrypt_subkey(key, 3).map_err(Error::Cipher)?;
-    let mut decryptor = cbc_decryptor(KeySize128, &data_key, iv, PkcsPadding);
-    decryptor.decrypt(&mut read_buffer, &mut write_buffer, true).map_err(Error::Cipher)?;
+    let mut result = vec![0u8; buffer_size];
+    let copy_len = unpadded.len().min(buffer_size);
+    result[..copy_len].copy_from_slice(&unpadded[..copy_len]);
 
-    Ok(buffer.to_vec())
+    Ok(result)
 }
 
 fn extract_master_key(data: &EncryptedContent, key: &[u8]) -> Result<Vec<u8>, Error> {

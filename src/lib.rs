@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate num_derive;
-
 use crate::error::Error;
 use crate::content::EncryptedContent;
 use crate::decrypt::{decrypt, PlainContent};
@@ -13,6 +10,7 @@ pub mod key;
 pub mod header;
 pub mod error;
 pub mod decrypt;
+pub mod v2;
 pub mod cli;
 
 pub fn decrypt_file<P: AsRef<Path>>(path: P, passphrase: &str) -> Result<PlainContent, Error> {
